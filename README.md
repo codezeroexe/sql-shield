@@ -68,6 +68,14 @@ Then open:
 http://localhost:3000
 ```
 
+## Frontend handoff
+
+For frontend implementation details, layout requirements, backend contract, and UI acceptance criteria, see:
+
+- [frontend-handoff.md](frontend-handoff.md)
+
+This file is the handoff document for the person building the interface.
+
 ## Security focus
 
 This project emphasizes:

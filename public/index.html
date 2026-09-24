@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SQLShield Demo</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="container">
+      <header class="hero">
+        <p class="eyebrow">Security demo</p>
+        <h1>SQL Injection Mitigation</h1>
+        <p class="subtitle">
+          Compare unsafe SQL construction with parameterized queries.
+        </p>
+      </header>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Login test</h2>
+          <button id="loadPayloadBtn" class="secondary-btn">
+            Load payload
+          </button>
+        </div>
+
+        <div class="field-row">
+          <label>
+            Username
+            <input id="username" type="text" value="alice" />
+          </label>
+          <label>
+            Password
+            <input id="password" type="text" value="pw123" />
+          </label>
+        </div>
+
+        <div class="field-row compact">
+          <label>
+            Payload preset
+            <select id="payloadPreset">
+              <option value="alice">Normal login</option>
+              <option value="' OR '1'='1 --">Classic bypass</option>
+              <option value="admin' --">Admin bypass</option>
+              <option value="' OR 1=1 LIMIT 1 --">Union payload</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="button-row">
+          <button id="safeBtn">Test safe login</button>
+          <button id="unsafeBtn" class="danger-btn">
+            Test vulnerable login
+          </button>
+        </div>
+      </section>
+
+      <section class="results-grid">
+        <article class="result-card safe">
+          <h3>Safe flow</h3>
+          <pre id="safeResult">Waiting for test...</pre>
+        </article>
+
+        <article class="result-card danger">
+          <h3>Unsafe flow</h3>
+          <pre id="unsafeResult">Waiting for test...</pre>
+        </article>
+      </section>
+
+      <section class="panel">
+        <h2>Search comparison</h2>
+        <div class="field-row">
+          <label>
+            Search term
+            <input id="searchTerm" type="text" value="a" />
+          </label>
+        </div>
+
+        <div class="button-row">
+          <button id="searchBtn">Run comparison</button>
+        </div>
+
+        <div class="search-results">
+          <div>
+            <h3>Safe query result</h3>
+            <pre id="safeSearchResult">Waiting...</pre>
+          </div>
+          <div>
+            <h3>Unsafe query result</h3>
+            <pre id="unsafeSearchResult">Waiting...</pre>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel notes-panel">
+        <h2>Mitigation skeleton</h2>
+        <ul>
+          <li>Trust boundary: user input enters app</li>
+          <li>Validation: required fields + expected format checks</li>
+          <li>Parameter binding: values are passed as data, not SQL</li>
+          <li>Least privilege: DB account should not have extra privileges</li>
+          <li>Testing: attack payloads must be run before deployment</li>
+        </ul>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
