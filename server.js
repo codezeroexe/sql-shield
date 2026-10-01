@@ -47,12 +47,13 @@ function initializeDatabase() {
   });
 }
 
-function buildResponse(label, status, result, note = "") {
+function buildResponse(label, status, result, note = "", detail = {}) {
   return {
     label,
     status,
     result,
     note,
+    ...detail,
   };
 }
 
@@ -85,6 +86,7 @@ app.post("/api/login-demo", (req, res) => {
           "unsafe",
           rows,
           "Unsafe SQL string interpolation allows user input to become executable query logic.",
+          { query: unsafeQuery, boundValues: null },
         ),
       );
     });
@@ -94,8 +96,9 @@ app.post("/api/login-demo", (req, res) => {
 
   const safeQuery =
     "SELECT id, username FROM users WHERE username = ? AND password = ?";
+  const boundValues = [username, password];
 
-  db.get(safeQuery, [username, password], (err, row) => {
+  db.get(safeQuery, boundValues, (err, row) => {
     if (err) {
       return res
         .status(500)
@@ -108,6 +111,7 @@ app.post("/api/login-demo", (req, res) => {
         "safe",
         row ? [row] : [],
         "Prepared statements keep input as a value instead of SQL syntax.",
+        { query: safeQuery, boundValues },
       ),
     );
   });
@@ -117,7 +121,12 @@ app.get("/api/search-demo", (req, res) => {
   const term = String(req.query.term || "");
 
   if (!term) {
-    return res.json({ safe: [], unsafe: [], note: "No term provided." });
+    return res.json({
+      safe: [],
+      unsafe: [],
+      boundValues: { safe: null, unsafe: null },
+      note: "No term provided.",
+    });
   }
 
   const safeQuery =
@@ -137,6 +146,8 @@ app.get("/api/search-demo", (req, res) => {
       return res.json({
         safe: safeRows,
         unsafe: unsafeRows,
+        queries: { safe: safeQuery, unsafe: unsafeQuery },
+        boundValues: { safe: [`%${term}%`], unsafe: null },
         note: "The safe query binds the term as data; the unsafe query injects it into SQL text.",
       });
     });
