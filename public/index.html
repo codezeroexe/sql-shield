@@ -4,186 +4,636 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SQLShield — SQL Injection Mitigation</title>
-    <meta name="description" content="Compare unsafe SQL construction with parameterized queries." />
+    <meta
+      name="description"
+      content="Compare unsafe SQL construction with parameterized queries."
+    />
+    <link rel="preload" href="fonts/azeret-mono-var.woff2" as="font" type="font/woff2" crossorigin />
     <style>
-      :root {
-        --bg: #f5f5f5;
-        --card: #ffffff;
-        --fill: #f0f0f0;
-        --line: #dedede;
-        --line-strong: #111111;
-        --ink: #111111;
-        --ink-soft: #5c5c5c;
-        --ink-faint: #8a8a8a;
-        --radius: 10px;
+      /* ---- printer face: one variable file, whole weight range ---- */
+      @font-face {
+        font-family: "Azeret Mono";
+        src: url("fonts/azeret-mono-var.woff2") format("woff2-variations");
+        font-weight: 100 900;
+        font-style: normal;
+        font-display: swap;
       }
 
-      * { box-sizing: border-box; }
+      :root {
+        /* ground: cheap bond paper, warm, slightly grey with age */
+        --paper: #ece5d8;
+        --sheet: #f7f3ea;
+        --void: #b9b0a0;
 
-      html { -webkit-text-size-adjust: 100%; }
+        /* ink: the original sheet is black on white */
+        --ink: #17181c;
+        --ink-2: #45494f;
+        --ink-3: #5c626a;
+
+        --rule: #cdc4b1;
+        --rule-soft: #ddd5c5;
+        /* carbon copy violet: the duplicate that should not exist */
+        --carbon: #463a66;
+        --carbon-2: #6b5c8e;
+        --carbon-wash: #e5e0ee;
+        /* a statement the parser refused */
+        --alarm: #9d2f1d;
+
+        --guide: #626d7a; /* column numbers: faint, but they are read, not decoration */
+        --sel: #d6cdea; /* selection reads as a highlighter swipe */
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        -webkit-text-size-adjust: 100%;
+        scrollbar-color: var(--rule) var(--paper);
+      }
 
       body {
         margin: 0;
-        background: var(--bg);
+        background: var(--paper);
         color: var(--ink);
-        font: 15px/1.55 "Inter", system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
-        font-feature-settings: "tnum" 1;
+        font: 400 14px/1.6 "Azeret Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+        font-variant-numeric: tabular-nums;
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
       }
 
-      main {
-        max-width: 1080px;
-        margin: 0 auto;
-        padding: 56px 24px 80px;
+      /* Browser surfaces the design still has to own. */
+      ::selection {
+        background: var(--sel);
+        color: var(--ink);
       }
 
-      h1, h2, h3, p { margin: 0; }
+      input::selection,
+      textarea::selection {
+        background: var(--carbon-2);
+        color: #fff;
+      }
 
-      .eyebrow {
-        font-size: 11px;
+      ::-webkit-scrollbar {
+        width: 11px;
+        height: 11px;
+      }
+
+      ::-webkit-scrollbar-track {
+        background: repeating-linear-gradient(
+          to bottom,
+          var(--paper) 0 5px,
+          var(--rule-soft) 5px 6px
+        );
+      }
+
+      ::-webkit-scrollbar-thumb {
+        background: var(--rule);
+        border: 3px solid var(--paper);
+        border-radius: 6px;
+      }
+
+      ::-webkit-scrollbar-thumb:hover {
+        background: var(--ink-3);
+      }
+
+      h1,
+      h2,
+      h3,
+      p,
+      ol,
+      figure {
+        margin: 0;
+      }
+
+      /* ============================ THE ROLL ============================
+         A continuous fanfold: tractor rails down both edges, the sheet
+         between them, and the roll running on until it is torn off.
+         ================================================================= */
+
+      .roll {
+        display: grid;
+        grid-template-columns: 26px minmax(0, 1fr) 26px;
+        min-height: 100vh;
+      }
+
+      .rail {
+        background-color: var(--rule-soft);
+        background-image: radial-gradient(
+          circle at 50% 50%,
+          var(--void) 0 2.5px,
+          transparent 3px
+        );
+        background-size: 12px 20px;
+        background-position: center 4px;
+        background-repeat: repeat-y;
+        border-inline: 1px solid var(--rule);
+      }
+
+      .sheet {
+        min-width: 0;
+        padding: 0 clamp(16px, 4vw, 56px);
+      }
+
+      /* every printed line lives on the same strict column grid */
+      .sheet > * {
+        max-width: 1240px;
+        margin-inline: auto;
+      }
+
+      .band {
+        padding-block: clamp(20px, 3.4vw, 40px);
+        border-bottom: 1px dashed var(--rule);
+      }
+
+      .band:last-of-type {
+        border-bottom: 0;
+      }
+
+      /* running head in the margin, the way a printout carries one */
+      .running {
+        display: flex;
+        align-items: baseline;
+        gap: 14px;
+        padding-bottom: 10px;
+        margin-bottom: 22px;
+        border-bottom: 1px solid var(--ink);
+      }
+
+      .running__name {
+        font-size: 12px;
         font-weight: 600;
-        letter-spacing: 0.18em;
+        letter-spacing: 0.2em;
         text-transform: uppercase;
-        color: var(--ink-faint);
       }
 
-      h1 {
-        margin-top: 14px;
-        font-size: clamp(30px, 5vw, 46px);
-        font-weight: 650;
-        letter-spacing: -0.025em;
-        line-height: 1.05;
+      .running__note {
+        font-size: 12px;
+        color: var(--ink-3);
+        letter-spacing: 0.02em;
       }
 
-      .lede {
-        margin-top: 12px;
-        max-width: 56ch;
-        color: var(--ink-soft);
-        font-size: 17px;
+      /* ============================ MASTHEAD ============================ */
+
+      .masthead {
+        padding-top: clamp(28px, 5vw, 56px);
       }
 
-      .status {
+      .masthead h1 {
+        max-width: 22ch;
+        font-size: clamp(28px, 5.4vw, 60px);
+        font-weight: 800;
+        line-height: 1.02;
+        letter-spacing: -0.03em;
+        text-wrap: balance;
+      }
+
+      .masthead h1 em {
+        font-style: normal;
+        font-weight: 300;
+      }
+
+      .thesis {
+        max-width: 68ch;
+        margin-top: 18px;
+        font-size: clamp(14px, 1.5vw, 16px);
+        line-height: 1.7;
+        color: var(--ink-2);
+      }
+
+      .thesis strong {
+        font-weight: 600;
+        color: var(--ink);
+      }
+
+      .ident {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px 16px;
+        margin-top: 22px;
+        padding-top: 14px;
+        border-top: 1px solid var(--rule);
+        font-size: 12px;
+        color: var(--ink-3);
+      }
+
+      .ident__mark {
+        font-weight: 700;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--ink);
+      }
+
+      /* printer lamp: ink present, or a dark bulb */
+      .lamp {
         display: inline-flex;
         align-items: center;
-        gap: 8px;
-        margin-top: 22px;
-        padding: 5px 12px 5px 10px;
-        border: 1px solid var(--line);
-        border-radius: 999px;
-        background: var(--card);
-        font-size: 12px;
-        color: var(--ink-soft);
+        gap: 7px;
       }
 
-      .status::before {
+      .lamp::before {
         content: "";
-        width: 7px;
-        height: 7px;
+        width: 8px;
+        height: 8px;
         border-radius: 50%;
-        background: var(--ink-faint);
+        background: var(--ink-3);
+        transition: background-color 240ms ease, box-shadow 240ms ease;
       }
 
-      .status[data-state="up"]::before { background: var(--ink); }
-      .status[data-state="down"]::before { background: transparent; box-shadow: inset 0 0 0 1px var(--ink-soft); }
-
-      @keyframes rise {
-        from { opacity: 0; transform: translateY(12px); }
+      .lamp[data-state="up"]::before {
+        background: var(--ink);
+        box-shadow: 0 0 0 3px rgb(23 24 28 / 0.12);
       }
 
-      @keyframes sweep {
-        from { background: var(--ink); color: #fff; border-color: var(--ink); }
+      .lamp[data-state="checking"]::before {
+        animation: filament 900ms ease-in-out infinite;
       }
 
-      @keyframes breathe {
-        50% { opacity: 0.45; }
-      }
-
-      main > * { animation: rise 520ms cubic-bezier(0.22, 0.68, 0.24, 1) both; }
-      main > *:nth-child(2) { animation-delay: 70ms; }
-      main > *:nth-child(3) { animation-delay: 140ms; }
-      main > *:nth-child(4) { animation-delay: 210ms; }
-      main > *:nth-child(5) { animation-delay: 280ms; }
-      main > *:nth-child(6) { animation-delay: 350ms; }
-
-      .output { transition: background-color 200ms ease, color 200ms ease, border-color 200ms ease; }
-
-      .output.pending { animation: breathe 1.1s ease-in-out infinite; }
-
-      .output.fresh { animation: sweep 620ms cubic-bezier(0.22, 0.68, 0.24, 1) both; }
-
-      .query code { transition: color 200ms ease; }
-      .query.fresh code { animation: sweep 620ms cubic-bezier(0.22, 0.68, 0.24, 1) both; }
-
-      @media (prefers-reduced-motion: reduce) {
-        *, *::before, *::after {
-          animation-duration: 1ms !important;
-          animation-delay: 0ms !important;
-          animation-iteration-count: 1 !important;
-          transition-duration: 1ms !important;
+      @keyframes filament {
+        50% {
+          opacity: 0.25;
         }
       }
 
-      section { margin-top: 40px; }
+      /* ============================= RECORDS =============================
+         One response is one detached sheet. Nothing mutates in place: the
+         old sheet tears off and a new one feeds down from the sprocket.
+         ================================================================= */
 
-      .section-head {
+      .pair {
+        display: grid;
+        gap: 20px;
+        align-items: start;
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      /* Two readable records side by side need real width: each measured
+         statement is 72 columns wide. Below this they stack instead of
+         shrinking into something unreadable. */
+      /* One record is not a pair: it takes the whole sheet instead of standing in
+         the left column of a grid built for two. */
+      @media (min-width: 1300px) {
+        .pair {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .pair--single {
+          grid-template-columns: minmax(0, 1fr);
+        }
+      }
+
+      .record {
+        position: relative;
+        min-width: 0;
+        padding: 20px 18px 24px;
+        background: var(--sheet);
+        border: 1px solid var(--rule);
+        box-shadow: 0 1px 0 rgb(23 24 28 / 0.05), 0 6px 14px -10px rgb(23 24 28 / 0.42);
+      }
+
+      /* a carbon copy is a violet duplicate of the same record */
+      .record[data-flow="unsafe"] {
+        color: var(--carbon);
+        background: var(--carbon-wash);
+        border-color: #bfb5d4;
+      }
+
+      .record[data-outcome="rejected"] {
+        color: var(--alarm);
+        background: #f6e6e1;
+        border-color: #dcb4a9;
+      }
+
+      /* The tear. A sheet off the printer has a clean edge; a carbon copy
+         has been pulled away from its original, so its edge is notched.
+         This is the material difference between the two flows, and it is
+         geometry rather than a coloured rule bolted onto a card. */
+      .record::before {
+        content: "";
+        position: absolute;
+        inset: -1px -1px auto;
+        height: 6px;
+        background: var(--sheet);
+      }
+
+      .record[data-flow="unsafe"]::before,
+      .record[data-outcome="rejected"]::before {
+        background: var(--carbon-wash);
+        mask-image: linear-gradient(45deg, transparent 50%, #000 50%),
+          linear-gradient(-45deg, transparent 50%, #000 50%);
+        mask-size: 9px 6px;
+        mask-composite: intersect;
+        -webkit-mask-image: linear-gradient(45deg, transparent 50%, #000 50%),
+          linear-gradient(-45deg, transparent 50%, #000 50%);
+        -webkit-mask-size: 9px 6px;
+        -webkit-mask-composite: source-in;
+      }
+
+      .record[data-outcome="rejected"]::before {
+        background: #f6e6e1;
+      }
+
+      /* rubber stamp, one per sheet, never a badge */
+      .stamp {
+        position: absolute;
+        top: 14px;
+        right: 18px;
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        transform: rotate(-3.5deg);
+        padding: 3px 8px;
+        border: 2px solid currentColor;
+        opacity: 0.62;
+      }
+
+      .record__head {
         display: flex;
         align-items: baseline;
-        justify-content: space-between;
-        gap: 16px;
-        padding-bottom: 12px;
-        margin-bottom: 18px;
-        border-bottom: 1px solid var(--line);
+        gap: 12px;
+        padding-right: 96px;
       }
 
-      .section-head h2 {
-        font-size: 12px;
-        font-weight: 600;
-        letter-spacing: 0.16em;
+      .record__label {
+        font-size: 18px;
+        font-weight: 700;
+        line-height: 1.25;
+        letter-spacing: 0.02em;
         text-transform: uppercase;
-        color: var(--ink-soft);
       }
 
-      .section-head .hint { font-size: 12px; color: var(--ink-faint); }
+      .record__chip {
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--ink-3);
+      }
 
-      .card {
-        background: var(--card);
-        border: 1px solid var(--line);
-        border-radius: var(--radius);
-        padding: 20px;
+      .record[data-flow="unsafe"] .record__chip {
+        color: var(--carbon-2);
+      }
+
+      /* ---- a printed field: a name in the margin, its value in the field */
+      .field {
+        display: grid;
+        grid-template-columns: 74px minmax(0, 1fr);
+        gap: 14px;
+        padding-top: 12px;
+        margin-top: 12px;
+        border-top: 1px solid currentColor;
+        border-top-color: color-mix(in srgb, currentColor 22%, transparent);
+      }
+
+      /* the measured statement claims the whole sheet width: 72 columns is
+         a lot of horizontal space and a hanging indent would eat it */
+      .field--measured {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 7px;
+      }
+
+      .field__name {
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        opacity: 0.82;
+        padding-top: 3px;
+      }
+
+      .field__body {
+        min-width: 0;
+      }
+
+      .print {
+        margin: 0;
+        font: inherit;
+        font-size: 12.5px;
+        line-height: 1.65;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+
+      /* ---- the measurement ----
+         One column width, derived once from this element's own font size,
+         so the ruler's ticks, the field-limit rule and the printed
+         characters are guaranteed to be the same width. Deriving it from
+         `ch` anywhere else would silently resolve against a different
+         font size and put the ruler somewhere the text is not.
+         ------------------------------------------------------------- */
+      .measured {
+        position: relative;
+        --col: 0.65em;
+        --cols: 72;
+        font-size: 11px;
+        overflow: hidden;
+      }
+
+      .measured .print {
+        font-size: 11px;
+      }
+
+      .ruler {
+        display: flex;
+        font-size: 11px;
+        margin-bottom: 4px;
+        color: var(--guide);
+        font-variant-numeric: tabular-nums;
+        user-select: none;
+      }
+
+      .ruler span {
+        flex: 0 0 calc(10 * var(--col));
+      }
+
+      /* the last tick before the limit, called out */
+      .ruler span:last-child {
+        color: var(--carbon-2);
+      }
+
+      /* the field limit, at column 72, drawn where the printer stops */
+      .limit {
+        position: absolute;
+        top: 15px;
+        bottom: 0;
+        left: calc(var(--cols) * var(--col));
+        width: 1px;
+        color: var(--carbon-2);
+        background: currentColor;
+        opacity: 0.7;
+      }
+
+      .limit::after {
+        content: "72";
+        position: absolute;
+        bottom: 0;
+        left: 4px;
+        font-size: 11px;
+        color: currentColor;
+        letter-spacing: 0.04em;
+      }
+
+      /* characters the printer could not keep inside the field */
+      .ov {
+        color: var(--carbon);
+        background: color-mix(in srgb, var(--carbon) 16%, transparent);
+        box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--carbon) 70%, transparent);
+      }
+
+      .record[data-flow="unsafe"] .ov {
+        color: var(--alarm);
+        background: color-mix(in srgb, var(--alarm) 22%, transparent);
+        box-shadow: inset 0 -2px 0 var(--alarm);
+      }
+
+      /* the input itself, wherever it landed in the statement. Declared
+         before `.ov` so that characters which are both input AND escapee
+         read as the more urgent fact. */
+      .typed {
+        background: color-mix(in srgb, var(--carbon) 18%, transparent);
+        box-shadow: 0 1px 0 color-mix(in srgb, var(--carbon) 45%, transparent);
+      }
+
+      .record[data-flow="unsafe"] .typed {
+        background: color-mix(in srgb, var(--alarm) 16%, transparent);
+        box-shadow: 0 1px 0 color-mix(in srgb, var(--alarm) 42%, transparent);
+      }
+
+      /* Text after the first `;`. sqlite3 compiles one statement and drops
+         the rest, so this was never executed — printing it in the same ink as
+         live SQL would credit the reader with an attack that never ran. It is
+         struck through and dimmed: present, legible, plainly not what ran. */
+      .dropped {
+        opacity: 0.5;
+        text-decoration: line-through;
+        text-decoration-thickness: 1px;
+      }
+
+      .record[data-flow="unsafe"] .dropped {
+        color: var(--ink-3);
+      }
+
+      .print:empty::before {
+        content: "no request sent yet";
+        opacity: 0.6;
+      }
+
+      .print--response {
+        padding: 10px 12px;
+        background: color-mix(in srgb, currentColor 5%, transparent);
+        border: 1px solid color-mix(in srgb, currentColor 16%, transparent);
+        max-height: 260px;
+        overflow: auto;
+        font-size: 12.5px;
+      }
+
+      .tally {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+        margin-top: 14px;
+        font-size: 12.5px;
+      }
+
+      .tally b {
+        font-size: 19px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+      }
+
+      .note:empty {
+        display: none;
+      }
+
+      .note {
+        margin-top: 9px;
+        font-size: 12px;
+        line-height: 1.7;
+        color: color-mix(in srgb, currentColor 88%, transparent);
+      }
+
+      .why {
+        margin-top: 16px;
+        padding-top: 13px;
+        border-top: 1px dashed color-mix(in srgb, currentColor 30%, transparent);
+        font-size: 12.5px;
+        line-height: 1.72;
+        color: color-mix(in srgb, currentColor 82%, transparent);
+      }
+
+      .why em {
+        font-style: normal;
+        font-weight: 600;
+        color: currentColor;
+      }
+
+      /* ============================ CONSOLE ============================= */
+
+      .slip {
+        padding: 20px 22px;
+        background: var(--sheet);
+        border: 1px solid var(--rule);
+        box-shadow: 0 1px 0 rgb(23 24 28 / 0.05), 0 6px 14px -10px rgb(23 24 28 / 0.42);
       }
 
       .fields {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-        gap: 16px;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 18px;
       }
 
-      .field { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+      label.field-label {
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+        min-width: 0;
+      }
 
-      .field > span {
+      .field-label > span {
         font-size: 11px;
         font-weight: 600;
-        letter-spacing: 0.12em;
+        letter-spacing: 0.14em;
         text-transform: uppercase;
-        color: var(--ink-faint);
+        color: var(--ink-3);
       }
 
-      input, select, button, .output { font: inherit; }
+      input,
+      select,
+      button {
+        font: inherit;
+        font-size: 13px;
+      }
 
-      input, select {
+      input,
+      select {
         width: 100%;
         padding: 10px 12px;
         color: var(--ink);
-        background: var(--card);
-        border: 1px solid var(--line);
-        border-radius: 8px;
-        font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-        font-size: 14px;
+        background: #fffdf8;
+        border: 1px solid var(--rule);
+        border-bottom: 2px solid var(--ink-3);
+        border-radius: 0;
+        caret-color: var(--carbon);
       }
 
-      input::placeholder { color: var(--ink-faint); }
+      select {
+        /* native arrow is not an icon system, but the platform one is honest */
+        appearance: none;
+        background-image: linear-gradient(45deg, transparent 50%, var(--ink-2) 50%),
+          linear-gradient(135deg, var(--ink-2) 50%, transparent 50%);
+        background-position: right 14px center, right 9px center;
+        background-size: 5px 5px, 5px 5px;
+        background-repeat: no-repeat;
+        padding-right: 30px;
+      }
 
-      :is(input, select, button, pre):focus-visible {
-        outline: 2px solid var(--ink);
+      input::placeholder {
+        color: var(--ink-3);
+      }
+
+      :is(input, select, textarea, button):focus-visible {
+        outline: 2px solid var(--carbon);
         outline-offset: 2px;
       }
 
@@ -192,456 +642,1497 @@
         flex-wrap: wrap;
         gap: 10px;
         margin-top: 20px;
-        padding-top: 20px;
-        border-top: 1px solid var(--line);
+        padding-top: 18px;
+        border-top: 1px dashed var(--rule);
       }
 
       button {
-        padding: 10px 18px;
-        border: 1px solid var(--line-strong);
-        border-radius: 8px;
-        background: var(--card);
+        padding: 11px 18px;
         color: var(--ink);
-        font-size: 14px;
-        font-weight: 550;
+        background: var(--sheet);
+        border: 1px solid var(--ink);
+        border-radius: 0;
+        font-weight: 600;
+        letter-spacing: 0.01em;
         cursor: pointer;
-        transition: background 120ms ease, color 120ms ease;
+        transition: background-color 130ms ease, color 130ms ease,
+          transform 130ms ease;
       }
 
-      button:hover { background: var(--fill); }
+      button:hover:not(:disabled) {
+        background: var(--ink);
+        color: var(--sheet);
+      }
 
-      button.primary { background: var(--ink); color: #fff; }
-      button.primary:hover { background: #2c2c2c; }
+      button:active:not(:disabled) {
+        transform: translateY(1px);
+      }
 
-      button:disabled { opacity: 0.45; cursor: default; }
+      button[data-role="primary"] {
+        background: var(--ink);
+        color: var(--sheet);
+      }
 
-      .compare {
+      button[data-role="primary"]:hover:not(:disabled) {
+        background: var(--carbon);
+        border-color: var(--carbon);
+        color: #fff;
+      }
+
+      button[data-role="unsafe"] {
+        border-color: var(--carbon);
+        color: var(--carbon);
+      }
+
+      button[data-role="unsafe"]:hover:not(:disabled) {
+        background: var(--carbon);
+        color: #fff;
+      }
+
+      button:disabled {
+        opacity: 0.42;
+        cursor: default;
+      }
+
+      /* ============================ PRESET ROLL =============================
+         A batch is the same fanfold running faster: one form feed per preset,
+         its two sheets stacked down the roll in the order they printed. The
+         dashed rule between two of them means two sheets, exactly as it means
+         two sheets everywhere else on this page. Never a grid of ten cards —
+         a printer does not lay its output in a card wall.
+         ==================================================================== */
+
+      .feed {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-        gap: 16px;
+        gap: 26px;
+        margin-top: 22px;
       }
 
-      .panel { border-top: 3px solid var(--line-strong); }
-
-      .panel.unsafe {
-        border-top-style: dashed;
-        border-top-color: var(--ink-faint);
-        background-image: repeating-linear-gradient(
-          -45deg,
-          #0000 0 7px,
-          #00000008 7px 8px
-        );
+      .feed__sheet + .feed__sheet {
+        padding-top: 26px;
+        border-top: 1px dashed var(--rule);
       }
 
-      .panel-head {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-        margin-bottom: 14px;
-      }
-
-      .panel-head h3 {
+      .slip__lede {
+        max-width: 68ch;
         font-size: 13px;
-        font-weight: 600;
-        letter-spacing: 0.1em;
-        text-transform: uppercase;
+        line-height: 1.7;
+        color: var(--ink-2);
       }
 
-      .chip {
-        padding: 3px 9px;
-        border: 1px solid var(--line-strong);
-        border-radius: 999px;
-        font-size: 10px;
-        font-weight: 700;
-        letter-spacing: 0.14em;
-        text-transform: uppercase;
+      /* ten sheets would mean ten live regions. The roll announces one line
+         per form feed instead, in the same marginalia voice as its heads. */
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
       }
 
-      .panel.safe .chip { background: var(--ink); color: #fff; }
-      .panel.unsafe .chip { background: var(--card); color: var(--ink-soft); border-color: var(--ink-faint); }
+      /* An unrun sheet says so once, on the statement, not three times down
+         the column. The record's own empty-print placeholder is the world's
+         voice and it reads correctly in exactly one field. */
+      #scriptCall:empty::before,
+      #scriptResponse:empty::before {
+        content: none;
+      }
 
-      .output {
-        margin: 0;
-        min-height: 150px;
-        max-height: 320px;
-        overflow: auto;
-        padding: 14px;
-        background: var(--fill);
-        border: 1px solid var(--line);
-        border-radius: 8px;
-        font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+      .notice code {
+        color: var(--ink-2);
+      }
+
+      .feed__idle {
+        margin-top: 22px;
         font-size: 12.5px;
-        line-height: 1.5;
-        white-space: pre-wrap;
-        word-break: break-word;
+        line-height: 1.7;
+        color: var(--ink-3);
+      }
+
+      /* the reviewer's own statement, ruled like every other field here */
+      textarea {
+        width: 100%;
+        min-height: 108px;
+        padding: 10px 12px;
         color: var(--ink);
-      }
-
-      .output:empty::before {
-        content: "No request sent yet.";
-        color: var(--ink-faint);
-      }
-
-      .count {
-        margin-top: 12px;
-        font-size: 12px;
-        color: var(--ink-soft);
-      }
-
-      .query {
-        display: grid;
-        grid-template-columns: 58px 1fr;
-        gap: 10px;
-        align-items: start;
-        margin: 12px 0 0;
-        padding-top: 12px;
-        border-top: 1px solid var(--line);
-        font-size: 12px;
-      }
-
-      .query > span {
-        padding-top: 1px;
-        color: var(--ink-faint);
-        font-size: 10px;
-        font-weight: 600;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
-      }
-
-      .query code {
-        font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-        font-size: 11.5px;
-        line-height: 1.5;
-        color: var(--ink-soft);
-        word-break: break-word;
-      }
-
-      .query code:empty::before { content: "—"; color: var(--ink-faint); }
-
-      .why {
-        margin: 12px 0 0;
-        font-size: 12.5px;
-        line-height: 1.6;
-        color: var(--ink-soft);
-      }
-
-      .note {
-        margin-top: 14px;
+        background: #fffdf8;
+        border: 1px solid var(--rule);
+        border-bottom: 2px solid var(--ink-3);
+        border-radius: 0;
+        caret-color: var(--carbon);
+        font: inherit;
         font-size: 13px;
-        color: var(--ink-soft);
+        line-height: 1.6;
+        resize: vertical;
+        tab-size: 2;
       }
 
-      .note.fresh { animation: sweep 620ms cubic-bezier(0.22, 0.68, 0.24, 1) both; }
+      textarea::placeholder {
+        color: var(--ink-3);
+      }
+
+      :is(input, select, textarea, button):focus-visible {
+        outline: 2px solid var(--carbon);
+        outline-offset: 2px;
+      }
+
+      /* A note in ink, never in the alarm hue: the alarm is reserved for a
+         statement the engine refused, and this line is not one. */
+      .notice {
+        margin-top: 14px;
+        padding-top: 12px;
+        border-top: 1px dashed var(--rule);
+        font-size: 12px;
+        line-height: 1.7;
+        color: var(--ink-2);
+      }
+
+      /* ============================ CHECKLIST =========================== */
 
       .skeleton {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-        gap: 0 40px;
-        margin: 0;
-        padding: 0;
         list-style: none;
-        counter-reset: step;
+        padding: 0;
+        margin: 0;
+        border-top: 1px solid var(--rule);
       }
 
       .skeleton li {
         display: grid;
-        grid-template-columns: 26px 1fr;
-        gap: 12px;
-        padding: 14px 0;
-        border-top: 1px solid var(--line);
-        color: var(--ink-soft);
+        grid-template-columns: 40px 116px minmax(0, 1fr);
+        gap: 16px;
+        align-items: baseline;
+        padding: 13px 0;
+        border-bottom: 1px solid var(--rule-soft);
       }
-
-      .skeleton li:first-child { padding-top: 0; }
 
       .skeleton li::before {
-        counter-increment: step;
         content: counter(step, decimal-leading-zero);
-        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-        font-size: 12px;
-        color: var(--ink-faint);
-        padding-top: 2px;
+        counter-increment: step;
+        font-size: 11px;
+        color: var(--ink-3);
       }
 
-      .skeleton strong { display: block; color: var(--ink); font-weight: 600; }
-
-      footer {
-        margin-top: 48px;
-        padding-top: 20px;
-        border-top: 1px solid var(--line);
-        font-size: 12px;
-        color: var(--ink-faint);
+      .skeleton {
+        counter-reset: step;
       }
 
-      @media (max-width: 600px) {
-        main { padding: 32px 16px 56px; }
-        .section-head { flex-direction: column; gap: 4px; }
-        .actions button { flex: 1 1 100%; }
+      .skeleton b {
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+      }
+
+      .skeleton span {
+        font-size: 12.5px;
+        line-height: 1.7;
+        color: var(--ink-2);
+      }
+
+      /* ============================== COLOPHON ========================== */
+
+      .colophon {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 26px;
+        padding-block: 30px 44px;
+        margin-top: 34px;
+        border-top: 1px solid var(--ink);
+        font-size: 12px;
+        line-height: 1.8;
+        color: var(--ink-3);
+      }
+
+      .colophon h2 {
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--ink);
+        margin-bottom: 7px;
+      }
+
+      .colophon code {
+        font: inherit;
+        color: var(--ink-2);
+      }
+
+      /* ======================== THE PRINTED MOMENT ======================
+         One authored motion, in three parts. The sheet tears off and feeds
+         down from the sprocket; the carriage then prints it field by field
+         the way a printer advances down a page — each field wipes in left to
+         right, and the next field takes over as the last one lands; the
+         stamp comes down once the sheet is finished. Nothing else on the
+         page moves on its own.
+
+         `--d` is the field's place in that advance. It is written by the
+         script that fills the record, because the field count is the
+         response's to decide, not the stylesheet's.
+         ================================================================= */
+
+      @keyframes feed {
+        from {
+          clip-path: inset(0 0 100% 0);
+          transform: translateY(-10px);
+        }
+        to {
+          clip-path: inset(0);
+          transform: none;
+        }
+      }
+
+      /* the head sweeping one line, in fixed character steps */
+      @keyframes carriage {
+        from {
+          clip-path: inset(0 100% 0 0);
+        }
+        to {
+          clip-path: inset(0 -1px 0 0);
+        }
+      }
+
+      /* the field limit firing as the carriage reaches column 72. Only a
+         statement that actually overran the field gets this, and it gets a
+         beat of its own rather than a flash inside the wipe: the head has
+         to finish the line before the edge of the paper can react. */
+      @keyframes overrun {
+        0% {
+          color: var(--carbon-2);
+          opacity: 0.7;
+        }
+        30% {
+          color: var(--alarm);
+          opacity: 1;
+        }
+        100% {
+          color: var(--carbon-2);
+          opacity: 0.7;
+        }
+      }
+
+      /* a rubber stamp coming down, not bouncing: it is already flat when
+         it lands and the opacity is what sells the pressure */
+      @keyframes press {
+        from {
+          opacity: 0;
+          scale: 1.18;
+        }
+        to {
+          opacity: 0.62;
+          scale: 1;
+        }
+      }
+
+      /* fresh ink on a sheet that has just come off the machine. This is
+         also the whole reduced-motion path, so it has to read on its own. */
+      @keyframes fresh {
+        from {
+          opacity: 0.26;
+        }
+        to {
+          opacity: 0;
+        }
+      }
+
+      @keyframes fade {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 0.62;
+        }
+      }
+
+      .record::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: currentColor;
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      .record[data-printing] {
+        animation: feed 420ms cubic-bezier(0.16, 0.84, 0.28, 1) both;
+      }
+
+      .record[data-printing]::after {
+        animation: fresh 340ms ease-out both;
+      }
+
+      .record[data-printing] :is(.print, .tally, .note) {
+        animation: carriage 260ms steps(14, end) var(--d, 0ms) both;
+      }
+
+      .record[data-printing] .stamp {
+        animation: press 200ms cubic-bezier(0.2, 0.9, 0.3, 1) var(--stamp-d, 0ms) both;
+      }
+
+      .record[data-printing] .measured[data-overflow] .limit {
+        animation: overrun 320ms ease-out calc(var(--d, 0ms) + 190ms) both;
+      }
+
+      /* Reduced motion takes away the travel and keeps the fact. No sheet
+         feeds, no head sweeps, no limit flares — but the sheet still takes
+         ink and the stamp still arrives, because "this was just printed" is
+         feedback and not decoration. The lamp's idle filament stops pulsing
+         for the same reason: a loop nobody asked for is the one to drop. */
+      @media (prefers-reduced-motion: reduce) {
+        .record[data-printing] {
+          animation: none;
+        }
+
+        .record[data-printing] :is(.print, .tally, .note),
+        .record[data-printing] .measured[data-overflow] .limit {
+          animation: none;
+        }
+
+        .record[data-printing] .stamp {
+          animation: fade 200ms linear var(--stamp-d, 0ms) both;
+        }
+
+        .lamp[data-state="checking"]::before {
+          animation: none;
+          opacity: 0.4;
+        }
+      }
+
+      /* ============================== ADAPT ============================== */
+
+      @media (max-width: 720px) {
+        .roll {
+          grid-template-columns: 16px minmax(0, 1fr) 16px;
+        }
+
+        .rail {
+          background-size: 10px 20px;
+        }
+
+        /* The ruler and the column limit are a measurement, and below the
+           width where 72 columns fit they would be a lie. The character
+           colouring still marks what escaped the field, so the mechanism
+           survives on a phone without the page faking a printout. */
+        .limit,
+        .ruler {
+          display: none;
+        }
+
+        .field {
+          grid-template-columns: minmax(0, 1fr);
+          gap: 6px;
+        }
+
+        .field__name {
+          padding-top: 0;
+        }
+
+        .record__head {
+          padding-right: 0;
+        }
+
+        .stamp {
+          position: static;
+          display: inline-block;
+          transform: none;
+          margin-top: 10px;
+        }
+
+        .skeleton li {
+          grid-template-columns: 34px minmax(0, 1fr);
+        }
+
+        .skeleton li span {
+          grid-column: 2;
+        }
+      }
+
+      @media print {
+        .rail,
+        .actions,
+        .masthead .ident {
+          display: none;
+        }
+
+        body {
+          background: #fff;
+        }
+
+        .roll {
+          grid-template-columns: minmax(0, 1fr);
+        }
       }
     </style>
   </head>
   <body>
-    <main>
-      <header>
-        <p class="eyebrow">Security demo</p>
-        <h1>SQL Injection Mitigation</h1>
-        <p class="lede">
-          Compare unsafe SQL construction with parameterized queries. Both requests
-          hit the same endpoint; only the query construction differs.
-        </p>
-        <p class="status" id="status" data-state="idle">checking backend…</p>
-      </header>
+    <div class="roll">
+      <div class="rail" aria-hidden="true"></div>
 
-      <section>
-        <div class="section-head">
-          <h2>Login test</h2>
-          <span class="hint">POST /api/login-demo</span>
-        </div>
-        <div class="card">
-          <div class="fields">
-            <label class="field">
-              <span>Username</span>
-              <input id="username" type="text" value="alice" autocomplete="off" spellcheck="false" />
-            </label>
-            <label class="field">
-              <span>Password</span>
-              <input id="password" type="text" value="pw123" autocomplete="off" spellcheck="false" />
-            </label>
-            <label class="field">
-              <span>Payload preset</span>
-              <select id="payloadPreset">
-                <option value="alice">Normal login</option>
-                <option value="' OR '1'='1 --">Classic bypass</option>
-                <option value="admin' --">Admin bypass</option>
-                <option value="' UNION SELECT id, username FROM users --">Union payload</option>
-              </select>
-            </label>
+      <div class="sheet">
+        <header class="band masthead">
+          <h1>One string. <em>Two ways</em> the database reads it.</h1>
+          <p class="thesis">
+            SQLShield runs the <strong>same classic bypass payload</strong> through
+            both query constructions against the same database. Bound as a value it
+            can only ever be data. Interpolated into the statement it becomes syntax,
+            and prints back every row it was never allowed to see. The printer's field
+            is 72 columns wide — that width is the entire lesson.
+          </p>
+          <div class="ident">
+            <span class="ident__mark">SQLShield Demo</span>
+            <span class="lamp" id="lamp" data-state="checking">checking backend</span>
+            <span>node &middot; express &middot; sqlite3</span>
           </div>
-          <div class="actions">
-            <button class="primary" id="safeBtn" type="button">Test safe login</button>
-            <button id="unsafeBtn" type="button">Test vulnerable login</button>
-            <button id="loadPayloadBtn" type="button">Load payload</button>
-          </div>
-        </div>
-      </section>
+        </header>
 
-      <section>
-        <div class="section-head">
-          <h2>Query comparison</h2>
-          <span class="hint">parameter bound vs. string built</span>
-        </div>
-        <div class="compare">
-          <article class="card panel safe">
-            <div class="panel-head">
-              <h3>Safe flow</h3>
-              <span class="chip">prepared</span>
-            </div>
-            <pre class="output" id="safeResult" aria-live="polite"></pre>
-            <p class="count" id="safeCount"></p>
-            <p class="query"><span>Query</span><code id="safeQuery"></code></p>
-            <p class="query"><span>Bound</span><code id="safeBinding"></code></p>
-            <p class="query"><span>Call</span><code id="safeCall"></code></p>
-            <p class="why">Placeholder is filled in by the driver <em>after</em> SQLite has parsed the statement, so the statement is already fixed. The payload travels beside it as a value, never as SQL text.</p>
-          </article>
-          <article class="card panel unsafe">
-            <div class="panel-head">
-              <h3>Unsafe flow</h3>
-              <span class="chip">interpolated</span>
-            </div>
-            <pre class="output" id="unsafeResult" aria-live="polite"></pre>
-            <p class="count" id="unsafeCount"></p>
-            <p class="query"><span>Query</span><code id="unsafeQuery"></code></p>
-            <p class="query"><span>Bound</span><code>none — input is part of the SQL text</code></p>
-            <p class="query"><span>Call</span><code id="unsafeCall"></code></p>
-            <p class="why">The input was pasted into the string <em>before</em> SQLite parsed anything, so the input is the query. There is no separate value channel to escape into.</p>
-          </article>
-        </div>
-      </section>
-
-      <section>
-        <div class="section-head">
-          <h2>Search comparison</h2>
-          <span class="hint">GET /api/search-demo?term=</span>
-        </div>
-        <div class="card">
-          <div class="fields">
-            <label class="field">
-              <span>Search term</span>
-              <input id="searchTerm" type="text" value="a" autocomplete="off" spellcheck="false" />
-            </label>
+        <section class="band" aria-labelledby="proof-h">
+          <div class="running">
+            <p class="running__name" id="proof-h">Proof</p>
+            <span class="running__note" id="proof-note"
+              >pre-run on load &middot; payload <code>' OR '1'='1 --</code></span
+            >
           </div>
-          <div class="actions">
-            <button class="primary" id="searchBtn" type="button">Run comparison</button>
-          </div>
-          <div class="compare" style="margin-top: 20px">
-            <article class="card panel safe">
-              <div class="panel-head">
-                <h3>Safe query result</h3>
-                <span class="chip">prepared</span>
+          <div class="pair">
+            <article class="record" id="safeRecord" data-flow="safe">
+              <span class="stamp" id="safeStamp">safe</span>
+              <div class="record__head">
+                <h2 class="record__label">Safe flow</h2>
+                <span class="record__chip">prepared</span>
               </div>
-              <pre class="output" id="safeSearchResult" aria-live="polite"></pre>
-              <p class="count" id="safeSearchCount"></p>
-              <p class="query"><span>Query</span><code id="safeSearchQuery"></code></p>
-              <p class="query"><span>Bound</span><code id="safeSearchBinding"></code></p>
-              <p class="query"><span>Call</span><code id="safeSearchCall"></code></p>
+              <div class="field field--measured">
+                <span class="field__name">query</span>
+                <div class="field__body measured">
+                  <div class="ruler" id="safeRuler" aria-hidden="true"></div>
+                  <span class="limit" aria-hidden="true"></span>
+                  <pre class="print" id="safeQuery"></pre>
+                </div>
+              </div>
+              <div class="field">
+                <span class="field__name">bound</span>
+                <div class="field__body">
+                  <pre class="print" id="safeBinding"></pre>
+                </div>
+              </div>
+              <div class="field">
+                <span class="field__name">call</span>
+                <div class="field__body">
+                  <pre class="print" id="safeCall"></pre>
+                </div>
+              </div>
+              <div class="field">
+                <span class="field__name">response</span>
+                <div class="field__body">
+                  <pre class="print print--response" id="safeResponse" aria-live="polite"></pre>
+                </div>
+              </div>
+              <p class="tally" id="safeTally"></p>
+              <p class="note" id="safeNote" aria-live="polite"></p>
+              <p class="why">
+                The payload went in as a <em>bound value</em>. SQLite parsed the
+                statement before the driver ever saw a single byte of it, so the only
+                question left to ask was whether it matched. It did not.
+              </p>
             </article>
-            <article class="card panel unsafe">
-              <div class="panel-head">
-                <h3>Unsafe query result</h3>
-                <span class="chip">interpolated</span>
+
+            <article class="record" id="unsafeRecord" data-flow="unsafe">
+              <span class="stamp" id="unsafeStamp">injected</span>
+              <div class="record__head">
+                <h2 class="record__label">Unsafe flow</h2>
+                <span class="record__chip">interpolated</span>
               </div>
-              <pre class="output" id="unsafeSearchResult" aria-live="polite"></pre>
-              <p class="count" id="unsafeSearchCount"></p>
-              <p class="query"><span>Query</span><code id="unsafeSearchQuery"></code></p>
-              <p class="query"><span>Bound</span><code>none — input is part of the SQL text</code></p>
-              <p class="query"><span>Call</span><code id="unsafeSearchCall"></code></p>
+              <div class="field field--measured">
+                <span class="field__name">query</span>
+                <div class="field__body measured">
+                  <div class="ruler" id="unsafeRuler" aria-hidden="true"></div>
+                  <span class="limit" aria-hidden="true"></span>
+                  <pre class="print" id="unsafeQuery"></pre>
+                </div>
+              </div>
+              <div class="field">
+                <span class="field__name">bound</span>
+                <div class="field__body">
+                  <pre class="print">none &mdash; input is part of the SQL text</pre>
+                </div>
+              </div>
+              <div class="field">
+                <span class="field__name">call</span>
+                <div class="field__body">
+                  <pre class="print" id="unsafeCall"></pre>
+                </div>
+              </div>
+              <div class="field">
+                <span class="field__name">response</span>
+                <div class="field__body">
+                  <pre class="print print--response" id="unsafeResponse" aria-live="polite"></pre>
+                </div>
+              </div>
+              <p class="tally" id="unsafeTally"></p>
+              <p class="note" id="unsafeNote" aria-live="polite"></p>
+              <p class="why">
+                The same characters were pasted into the string <em>before</em> anything
+                was parsed, so the input <em>is</em> the query. It closed the password
+                clause, made its own condition true, and commented out the rest. There
+                is no value channel to escape into, because there is no value channel.
+              </p>
             </article>
           </div>
-          <p class="note" id="searchNote" aria-live="polite"></p>
-        </div>
-      </section>
+        </section>
 
-      <section>
-        <div class="section-head">
-          <h2>Mitigation skeleton</h2>
-          <span class="hint">the pattern to carry into real systems</span>
-        </div>
-        <div class="card">
+        <section class="band" aria-labelledby="console-h">
+          <div class="running">
+            <p class="running__name" id="console-h">Request slip</p>
+            <span class="running__note">fill it in, tear it off, send it</span>
+          </div>
+          <div class="slip">
+            <div class="fields">
+              <label class="field-label">
+                <span>Username</span>
+                <input
+                  id="username"
+                  type="text"
+                  value="alice"
+                  autocomplete="off"
+                  spellcheck="false"
+                />
+              </label>
+              <label class="field-label">
+                <span>Password</span>
+                <input
+                  id="password"
+                  type="text"
+                  value="pw123"
+                  autocomplete="off"
+                  spellcheck="false"
+                />
+              </label>
+              <label class="field-label">
+                <span>Payload preset</span>
+                <select id="preset">
+                  <option value="alice">Normal login</option>
+                  <option value="' OR '1'='1 --">Classic bypass</option>
+                  <option value="admin' --">Admin bypass</option>
+                  <option value="' UNION SELECT id, username FROM users --">
+                    Union payload
+                  </option>
+                  <option value="' OR 1">Broken statement</option>
+                </select>
+              </label>
+            </div>
+            <div class="actions">
+              <button id="safeBtn" type="button" data-role="primary">
+                Test safe login
+              </button>
+              <button id="unsafeBtn" type="button" data-role="unsafe">
+                Test vulnerable login
+              </button>
+              <button id="loadBtn" type="button">Load payload</button>
+              <button id="rerunBtn" type="button">Re-run proof</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="band" aria-labelledby="roll-h">
+          <div class="running">
+            <p class="running__name" id="roll-h">Preset roll</p>
+            <span class="running__note"
+              >every payload &middot; both paths &middot; one form feed each</span
+            >
+          </div>
+          <div class="slip">
+            <p class="slip__lede">
+              A menu of five payloads is still a menu &mdash; it is a list of
+              attacks the author picked. Print the whole roll and every one of
+              them runs at both paths in turn, so the spread is evidence rather
+              than a claim. The request slip is armed to each payload as its
+              sheets print, so the fields above always hold exactly what is on
+              the sheet below them.
+            </p>
+            <div class="actions">
+              <button id="rollBtn" type="button" data-role="primary">
+                Print all presets
+              </button>
+            </div>
+            <p class="sr-only" id="rollStatus" role="status"></p>
+          </div>
+          <div class="feed" id="rollFeed">
+            <p class="feed__idle">
+              Nothing on the roll yet. Print all presets to run every payload
+              through both paths &mdash; five form feeds, ten sheets.
+            </p>
+          </div>
+        </section>
+
+        <section class="band" aria-labelledby="search-h">
+          <div class="running">
+            <p class="running__name" id="search-h">Search record</p>
+            <span class="running__note">GET /api/search-demo?term=</span>
+          </div>
+          <div class="slip">
+            <div class="fields">
+              <label class="field-label">
+                <span>Search term</span>
+                <input
+                  id="term"
+                  type="text"
+                  value="a"
+                  autocomplete="off"
+                  spellcheck="false"
+                />
+              </label>
+            </div>
+            <div class="actions">
+              <button id="searchBtn" type="button" data-role="primary">
+                Run comparison
+              </button>
+            </div>
+          </div>
+          <div class="pair" style="margin-top: 22px">
+            <article class="record" id="searchSafe" data-flow="safe">
+              <span class="stamp" id="searchSafeStamp">safe</span>
+              <div class="record__head">
+                <h2 class="record__label">Safe query</h2>
+                <span class="record__chip">prepared</span>
+              </div>
+              <div class="field field--measured">
+                <span class="field__name">query</span>
+                <div class="field__body measured">
+                  <div class="ruler" id="searchSafeRuler" aria-hidden="true"></div>
+                  <span class="limit" aria-hidden="true"></span>
+                  <pre class="print" id="searchSafeQuery"></pre>
+                </div>
+              </div>
+              <div class="field">
+                <span class="field__name">bound</span>
+                <div class="field__body"><pre class="print" id="searchSafeBound"></pre></div>
+              </div>
+              <div class="field">
+                <span class="field__name">response</span>
+                <div class="field__body">
+                  <pre class="print print--response" id="searchSafeResponse" aria-live="polite"></pre>
+                </div>
+              </div>
+              <p class="tally" id="searchSafeTally"></p>
+              <p class="note" id="searchSafeNote" aria-live="polite"></p>
+            </article>
+            <article class="record" id="searchUnsafe" data-flow="unsafe">
+              <span class="stamp" id="searchUnsafeStamp">injected</span>
+              <div class="record__head">
+                <h2 class="record__label">Unsafe query</h2>
+                <span class="record__chip">interpolated</span>
+              </div>
+              <div class="field field--measured">
+                <span class="field__name">query</span>
+                <div class="field__body measured">
+                  <div class="ruler" id="searchUnsafeRuler" aria-hidden="true"></div>
+                  <span class="limit" aria-hidden="true"></span>
+                  <pre class="print" id="searchUnsafeQuery"></pre>
+                </div>
+              </div>
+              <div class="field">
+                <span class="field__name">bound</span>
+                <div class="field__body">
+                  <pre class="print">none &mdash; input is part of the SQL text</pre>
+                </div>
+              </div>
+              <div class="field">
+                <span class="field__name">response</span>
+                <div class="field__body">
+                  <pre class="print print--response" id="searchUnsafeResponse" aria-live="polite"></pre>
+                </div>
+              </div>
+              <p class="tally" id="searchUnsafeTally"></p>
+              <p class="note" id="searchUnsafeNote" aria-live="polite"></p>
+            </article>
+          </div>
+          <p class="why" id="searchNote" style="color: var(--ink-2)" aria-live="polite"></p>
+        </section>
+
+        <section class="band" aria-labelledby="script-h">
+          <div class="running">
+            <p class="running__name" id="script-h">Your own statement</p>
+            <span class="running__note"
+              >POST /api/run-script &middot; nothing between it and sqlite3</span
+            >
+          </div>
+          <div class="slip">
+            <div class="fields">
+              <label class="field-label">
+                <span>SQL statement</span>
+                <textarea
+                  id="script"
+                  rows="4"
+                  spellcheck="false"
+                  autocomplete="off"
+                  autocapitalize="off"
+                  autocorrect="off"
+                >SELECT id, username FROM users
+WHERE username = '' OR '1'='1';</textarea
+                >
+              </label>
+            </div>
+            <p class="notice">
+              This runs <strong>exactly as typed</strong> against the live demo
+              database. It can read every row, and it can write.
+              <code>database.sqlite</code> is deleted and reseeded from four
+              hardcoded users on every boot, and it holds no real credentials.
+              <code>db.all</code> compiles one statement per call, so anything
+              you type after the first <code>;</code> is reported as never
+              compiled rather than quietly run.
+            </p>
+            <div class="actions">
+              <button id="scriptBtn" type="button" data-role="primary">
+                Run statement
+              </button>
+            </div>
+          </div>
+          <div class="pair pair--single" style="margin-top: 22px">
+            <article class="record" id="scriptRecord">
+              <span class="stamp" id="scriptStamp">not run</span>
+              <div class="record__head">
+                <h2 class="record__label">Statement record</h2>
+                <span class="record__chip">verbatim</span>
+              </div>
+              <div class="field field--measured">
+                <span class="field__name">statement</span>
+                <div class="field__body measured">
+                  <div class="ruler" id="scriptRuler" aria-hidden="true"></div>
+                  <span class="limit" aria-hidden="true"></span>
+                  <pre class="print" id="scriptQuery"></pre>
+                </div>
+              </div>
+              <div class="field">
+                <span class="field__name">bound</span>
+                <div class="field__body">
+                  <pre class="print">none &mdash; the statement is the request body</pre>
+                </div>
+              </div>
+              <div class="field">
+                <span class="field__name">call</span>
+                <div class="field__body"><pre class="print" id="scriptCall"></pre></div>
+              </div>
+              <div class="field">
+                <span class="field__name">response</span>
+                <div class="field__body">
+                  <pre class="print print--response" id="scriptResponse" aria-live="polite"></pre>
+                </div>
+              </div>
+              <p class="tally" id="scriptTally"></p>
+              <p class="note" id="scriptNote" aria-live="polite"></p>
+            </article>
+          </div>
+        </section>
+
+        <section class="band" aria-labelledby="skeleton-h">
+          <div class="running">
+            <p class="running__name" id="skeleton-h">Mitigation skeleton</p>
+            <span class="running__note">in order &mdash; each step depends on the last</span>
+          </div>
           <ol class="skeleton">
-            <li><div><strong>Trust boundary</strong>User input enters the app here. Everything after this point treats input as untrusted.</div></li>
-            <li><div><strong>Validation</strong>Required fields plus expected format checks, before any query runs.</div></li>
-            <li><div><strong>Parameter binding</strong>Values are passed as data, never concatenated into SQL text.</div></li>
-            <li><div><strong>Least privilege</strong>The database account gets only the permissions the app actually needs.</div></li>
-            <li><div><strong>Result handling</strong>Return the columns the caller needs, and nothing more.</div></li>
-            <li><div><strong>Testing</strong>Attack payloads are run against the demo before every release.</div></li>
+            <li>
+              <b>Trust boundary</b>
+              <span>Input arrives here. Everything downstream treats it as hostile by default.</span>
+            </li>
+            <li>
+              <b>Validation</b>
+              <span>Required fields and expected shapes, checked before any statement is built.</span>
+            </li>
+            <li>
+              <b>Parameter binding</b>
+              <span>Values travel beside the statement, never inside it. The fix for everything above.</span>
+            </li>
+            <li>
+              <b>Least privilege</b>
+              <span>The database account holds only the permissions the app actually uses.</span>
+            </li>
+            <li>
+              <b>Result handling</b>
+              <span>Return the columns the caller needs, and nothing more.</span>
+            </li>
+            <li>
+              <b>Testing</b>
+              <span>Run attack payloads before every release. This page is that test.</span>
+            </li>
           </ol>
-        </div>
-      </section>
+        </section>
 
-      <footer>Educational demo. No real authentication, no production credentials.</footer>
-    </main>
+        <template id="pairTpl">
+          <div class="feed__sheet">
+            <div class="running">
+              <p class="running__name" data-t="title">preset</p>
+              <span class="running__note" data-t="note"></span>
+            </div>
+            <div class="pair">
+              <article class="record" id="safeRecord{s}" data-flow="safe">
+                <span class="stamp" id="safeStamp{s}">safe</span>
+                <div class="record__head">
+                  <h2 class="record__label">Safe flow</h2>
+                  <span class="record__chip">prepared</span>
+                </div>
+                <div class="field field--measured">
+                  <span class="field__name">query</span>
+                  <div class="field__body measured">
+                    <div class="ruler" id="safeRuler{s}" aria-hidden="true"></div>
+                    <span class="limit" aria-hidden="true"></span>
+                    <pre class="print" id="safeQuery{s}"></pre>
+                  </div>
+                </div>
+                <div class="field">
+                  <span class="field__name">bound</span>
+                  <div class="field__body">
+                    <pre class="print" id="safeBinding{s}"></pre>
+                  </div>
+                </div>
+                <div class="field">
+                  <span class="field__name">call</span>
+                  <div class="field__body"><pre class="print" id="safeCall{s}"></pre></div>
+                </div>
+                <div class="field">
+                  <span class="field__name">response</span>
+                  <div class="field__body">
+                    <pre class="print print--response" id="safeResponse{s}"></pre>
+                  </div>
+                </div>
+                <p class="tally" id="safeTally{s}"></p>
+                <p class="note" id="safeNote{s}"></p>
+              </article>
+
+              <article class="record" id="unsafeRecord{s}" data-flow="unsafe">
+                <span class="stamp" id="unsafeStamp{s}">injected</span>
+                <div class="record__head">
+                  <h2 class="record__label">Unsafe flow</h2>
+                  <span class="record__chip">interpolated</span>
+                </div>
+                <div class="field field--measured">
+                  <span class="field__name">query</span>
+                  <div class="field__body measured">
+                    <div class="ruler" id="unsafeRuler{s}" aria-hidden="true"></div>
+                    <span class="limit" aria-hidden="true"></span>
+                    <pre class="print" id="unsafeQuery{s}"></pre>
+                  </div>
+                </div>
+                <div class="field">
+                  <span class="field__name">bound</span>
+                  <div class="field__body">
+                    <pre class="print">none &mdash; input is part of the SQL text</pre>
+                  </div>
+                </div>
+                <div class="field">
+                  <span class="field__name">call</span>
+                  <div class="field__body"><pre class="print" id="unsafeCall{s}"></pre></div>
+                </div>
+                <div class="field">
+                  <span class="field__name">response</span>
+                  <div class="field__body">
+                    <pre class="print print--response" id="unsafeResponse{s}"></pre>
+                  </div>
+                </div>
+                <p class="tally" id="unsafeTally{s}"></p>
+                <p class="note" id="unsafeNote{s}"></p>
+              </article>
+            </div>
+          </div>
+        </template>
+
+        <footer class="colophon">
+          <div>
+            <h2>Endpoints</h2>
+            <code>GET /api/health</code><br />
+            <code>POST /api/login-demo</code><br />
+            <code>GET /api/search-demo</code><br />
+            <code>POST /api/run-script</code>
+          </div>
+          <div>
+            <h2>Seeded users</h2>
+            <code>alice / pw123</code><br />
+            <code>bob / hunter2</code><br />
+            <code>admin / rootpass</code><br />
+            <code>charlie / letmein</code>
+          </div>
+          <div>
+            <h2>Disclaimer</h2>
+            Educational demo. The vulnerable route is deliberate and runs against a local
+            throwaway database. No real authentication, no production credentials.
+          </div>
+        </footer>
+      </div>
+
+      <div class="rail" aria-hidden="true"></div>
+    </div>
 
     <script>
-      const el = (id) => document.getElementById(id);
-      const pretty = (value) => JSON.stringify(value, null, 2);
-      const rows = (value) => `${value.length} row${value.length === 1 ? "" : "s"}`;
+      "use strict";
 
-      const restage = (id) => {
-        const node = el(id);
-        node.classList.remove("fresh");
-        void node.offsetWidth;
-        node.classList.add("fresh");
+      const $ = (id) => document.getElementById(id);
+      const pretty = (v) => JSON.stringify(v, null, 2);
+      const FIELD = 72; /* the printer's field width, in characters */
+
+      /* ---------------- the column ruler ---------------- */
+
+      const ruler = (host) => {
+        if (host.childElementCount) return;
+        for (let col = 0; col < FIELD; col += 10) {
+          const tick = document.createElement("span");
+          tick.textContent = String(col).padStart(2, "0");
+          host.append(tick);
+        }
       };
 
-      const pending = (id) => {
-        el(id).classList.remove("fresh");
-        el(id).classList.add("pending");
-        el(id).textContent = "Requesting…";
-      };
+      ["safeRuler", "unsafeRuler", "searchSafeRuler", "searchUnsafeRuler", "scriptRuler"].forEach((id) =>
+        ruler($(id)),
+      );
 
-      const settled = (id) => {
-        el(id).classList.remove("pending");
-        restage(id);
-      };
+      /* ---------------- printing a statement ----------------
+         The statement is printed exactly as the server built it, with three
+         marks laid over it: where the user's own input landed, every
+         character the printer could not keep inside the 72-column field, and
+         the tail the database driver threw away without compiling. All three
+         are computed from the real strings, not drawn by eye.
+         ------------------------------------------------------------- */
 
-      const failed = (id, error) => {
-        el(id).classList.remove("pending", "fresh");
-        el(id).textContent = pretty({ error: error.message });
-        el(id.replace("Result", "Count")).textContent = "";
+      function printStatement(host, text, inputs = [], executed = text) {
+        host.textContent = "";
+        /* cleared here, not at the end: an empty statement must not leave a
+           previous run's overflow claim standing over a blank field */
+        const box = host.closest(".measured");
+        box?.removeAttribute("data-overflow");
+        box?.removeAttribute("data-discarded");
+        if (!text) return;
+
+        /* only the part up to the first `;` outside a literal was compiled,
+           so only that prefix may be presented as having run. The split point
+           is the length of that prefix, not its position — it always starts
+           at the beginning. */
+        const ran = executed ? executed.length : text.length;
+        let escaped = false;
+        const spans = [];
+        for (const raw of inputs) {
+          if (!raw) continue;
+          const at = text.indexOf(raw);
+          if (at < 0) continue;
+          spans.push({ from: at, to: at + raw.length, cls: "typed" });
+        }
+        if (ran > 0 && ran < text.length) {
+          spans.push({ from: ran, to: text.length, cls: "dropped" });
+          box?.setAttribute("data-discarded", "");
+        }
+
+        /* A printer's field is 72 columns on every line it prints, not 72
+           columns across the whole block. Column is therefore counted from
+           the start of the current line, which matters the moment a statement
+           has a line break in it — the reviewer's own script, or anything
+           wrapped onto a second printed line. */
+        const lineStart = (pos) => {
+          const nl = text.lastIndexOf("\n", pos - 1);
+          return nl < 0 ? 0 : nl + 1;
+        };
+
+        const edges = new Set([0, text.length, FIELD, ran]);
+        spans.forEach((s) => edges.add(s.from).add(s.to));
+        /* a mark must not straddle a line break, or one class would cover two
+           columns of two different printed lines */
+        for (let nl = text.indexOf("\n"); nl >= 0; nl = text.indexOf("\n", nl + 1)) {
+          edges.add(nl);
+          edges.add(nl + 1);
+        }
+        const cuts = [...edges].filter((e) => e >= 0 && e <= text.length).sort((a, b) => a - b);
+
+        const frag = document.createDocumentFragment();
+        for (let i = 0; i < cuts.length - 1; i++) {
+          const from = cuts[i];
+          const to = cuts[i + 1];
+          if (to <= from) continue;
+          /* `pop`, not `find`: the dropped tail is pushed on last so it wins
+             the overlap with `typed`, the same way `.ov` beats `.typed`
+             in the cascade. Whether it ran is the more urgent fact. */
+          const cls = spans.filter((s) => from >= s.from && from < s.to).pop();
+          const over = from - lineStart(from) >= FIELD;
+          if (over) escaped = true;
+          const part = text.slice(from, to);
+          if (!cls && !over) {
+            frag.append(part);
+            continue;
+          }
+          const node = document.createElement("span");
+          /* a character can be three things at once — typed input, past the
+             field limit, and past the point the driver compiled. The order
+             here is the order of urgency: whether it ran beats where it
+             landed, and where it landed beats that it was typed. */
+          const parts = [];
+          if (cls) parts.push(cls.cls);
+          if (over) parts.push("ov");
+          node.className = parts.join(" ");
+          node.textContent = part;
+          frag.append(node);
+        }
+        host.append(frag);
+        /* the field limit is allowed to fire only for a statement that
+           actually overran it — see the `overrun` keyframes */
+        if (escaped) box?.setAttribute("data-overflow", "");
+      }
+
+      /* ---------------- the carriage, without forcing layout ----------------
+         The sheet feeds down, then prints itself field by field: 90ms per
+         field of advance, 260ms per wipe, stamp last. Re-printing cancels
+         whatever is still in flight, so hammering a button restarts one
+         sequence instead of stacking copies of it.
+         ------------------------------------------------------------------- */
+
+      const ADVANCE = 90;
+
+      function printing(record) {
+        record.getAnimations?.({ subtree: true }).forEach((a) => a.cancel());
+        record.removeAttribute("data-printing");
+        /* re-reading a style property here is the only reflow we pay for,
+           and it buys us a replayable sequence without a class thrash */
+        void record.offsetWidth;
+        record.dataset.printing = "";
+
+        const lines = record.querySelectorAll(".print, .tally, .note");
+        lines.forEach((line, i) => line.style.setProperty("--d", `${i * ADVANCE}ms`));
+        record.style.setProperty("--stamp-d", `${(lines.length - 1) * ADVANCE}ms`);
+      }
+
+      /* called when a response arrives but nothing should print: stop the
+         sheet that was mid-print rather than wiping its text under it */
+      function settle(record) {
+        record.getAnimations?.({ subtree: true }).forEach((a) => a.cancel());
+        record.removeAttribute("data-printing");
+      }
+
+      /* ---------------- request plumbing ---------------- */
+
+      const tokens = new Map();
+
+      /* keyed per record, not per path: both login modes POST to the same
+         endpoint, so a path key would let one cancel its own sibling */
+      async function ask(key, path, init) {
+        const ticket = (tokens.get(key) || 0) + 1;
+        tokens.set(key, ticket);
+        const res = await fetch(path, init);
+        const type = res.headers.get("content-type") || "";
+        if (!type.includes("application/json")) {
+          /* no JSON at all: the API is not behind this page */
+          const err = new Error(`HTTP ${res.status} — no API behind this page`);
+          err.status = res.status;
+          throw err;
+        }
+        const body = await res.json();
+        if (ticket !== tokens.get(key)) throw new Error("superseded");
+        /* The HTTP status decides whether the statement ran, not the shape of
+           the body. The server's rejection branches deliberately reuse the
+           success envelope so the real SQLite complaint survives in `note`, so
+           a body alone cannot tell "ran and returned rows" from "the engine
+           refused it". Trusting the shape is what let a rejected statement get
+           stamped INJECTED next to a tally of zero. Take the status's word for
+           it, and carry the server's own complaint through as the message so
+           the explanation isn't lost on the way. */
+        if (!res.ok) {
+          const err = new Error(
+            body?.note || body?.error || `HTTP ${res.status} ${res.statusText || ""}`.trim(),
+          );
+          err.status = res.status;
+          /* a refusal still carries the statement it refused. Dropping it here
+             is what let a rejected sheet print "no request sent yet" directly
+             above the engine's own SQLITE_ERROR. */
+          err.body = body;
+          throw err;
+        }
+        /* A 200 that still isn't a recognisable demo shape is a broken API,
+           not a result — treat it as the failure it is. */
+        const demo =
+          (typeof body?.label === "string" && typeof body?.status === "string") ||
+          Array.isArray(body?.safe) ||
+          Array.isArray(body?.unsafe);
+        if (!demo) {
+          const err = new Error(`unexpected response from ${path}`);
+          err.status = res.status;
+          throw err;
+        }
+        return body;
+      }
+
+      function tally(host, rows, word, extra) {
+        const n = Array.isArray(rows) ? rows.length : 0;
+        host.textContent = "";
+        const b = document.createElement("b");
+        b.textContent = String(n);
+        host.append(b, ` ${word}${n === 1 ? "" : "s"} returned`);
+        if (extra) host.append(document.createTextNode(` · ${extra}`));
+      }
+
+      const busy = (btn, on) => {
+        if (!btn) return;
+        btn.disabled = on;
+        if (on) btn.setAttribute("aria-busy", "true");
+        else btn.removeAttribute("aria-busy");
       };
 
       const call = (method, query, bound) =>
         bound
-          ? `${method}(${JSON.stringify(query)}, ${JSON.stringify(bound)}, callback)`
+          ? `${method}(${JSON.stringify(query)}, ${pretty(bound)}, callback)`
           : `${method}(${JSON.stringify(query)}, callback)`;
 
-      const mitigation = (method, queryId, boundId, callId, query, bound) => {
-        el(queryId).textContent = query || "";
-        if (boundId) el(boundId).textContent = bound ? pretty(bound) : "";
-        if (callId) el(callId).textContent = query ? call(method, query, bound) : "";
-        restage(queryId);
-        if (boundId) restage(boundId);
-        if (callId) restage(callId);
-      };
+      /* ---------------- one login request, one sheet ---------------- */
 
-      const login = async (mode) => {
-        const response = await fetch("/api/login-demo", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            mode,
-            username: el("username").value,
-            password: el("password").value,
-          }),
-        });
-        return response.json();
-      };
+      /* `sfx` names the sheet being printed. The proof pair is the page's own markup
+         and carries no suffix; every sheet the roll prints is a clone of the
+         same markup with its own. One filler, so the roll cannot drift from
+         the proof on anything but the payload. */
+      function fillLogin(mode, sfx, data, err, typed) {
+        const unsafe = mode === "vulnerable";
+        const s = (id) => id + sfx;
+        const ids = unsafe
+          ? { query: s("unsafeQuery"), call: s("unsafeCall"), res: s("unsafeResponse"), tally: s("unsafeTally"), stamp: s("unsafeStamp"), rec: s("unsafeRecord"), bound: null, note: s("unsafeNote") }
+          : { query: s("safeQuery"), call: s("safeCall"), res: s("safeResponse"), tally: s("safeTally"), stamp: s("safeStamp"), rec: s("safeRecord"), bound: s("safeBinding"), note: s("safeNote") };
 
-      async function testLogin(mode, panel) {
-        pending(panel);
-        const count = el(panel.replace("Result", "Count"));
+        const el = $(ids.rec);
+        const payload = data ? { ...data } : null;
+        delete payload?.query;
+        delete payload?.boundValues;
+
+        if (err) {
+          el.dataset.outcome = "rejected";
+          $(ids.stamp).textContent = "invalid";
+          /* The statement that was refused is the most informative thing on
+             this sheet. Printing it is the difference between "the engine
+             said no" and "here is what the engine refused, verbatim". */
+          const sent = err.body?.query;
+          printStatement($(ids.query), sent || "", typed || [], err.body?.executed);
+          if (ids.bound) {
+            $(ids.bound).textContent = sent ? pretty(err.body.boundValues) || "—" : "—";
+          }
+          $(ids.call).textContent = sent
+            ? call(unsafe ? "db.all" : "db.get", sent, err.body.boundValues)
+            : "—";
+          $(ids.res).textContent = pretty({ error: err.message });
+          $(ids.note).textContent = err.message;
+          /* say which kind of refusal this was, not just that it failed */
+          $(ids.tally).textContent =
+            err.status >= 500
+              ? "the database rejected the statement"
+              : err.status === 404
+                ? "no backend behind this page"
+                : err.status
+                  ? "refused before any statement ran"
+                  : "request failed";
+          printing(el);
+          return;
+        }
+
+        el.dataset.outcome = payload.status === "safe" ? "safe" : "injected";
+        $(ids.stamp).textContent = payload.status === "safe" ? "safe" : "injected";
+        $(ids.note).textContent = payload.note || "";
+
+        printStatement($(ids.query), data.query, typed, data.executed);
+        /* the whole point of the safe path: the values exist, on their own
+           channel, and never appear in the statement itself */
+        if (ids.bound) $(ids.bound).textContent = pretty(data.boundValues) || "—";
+        $(ids.call).textContent = data.query ? call(unsafe ? "db.all" : "db.get", data.query, data.boundValues) : "—";
+        $(ids.res).textContent = pretty(payload);
+        tally($(ids.tally), payload.result, "row");
+
+        printing(el);
+      }
+
+      /* `creds` lets the roll fire a payload without claiming the request slip,
+         and `tag` keeps its requests off the proof's cancellation key so a
+         second roll cancels the first roll instead of the first run's sheets. */
+      async function runLogin(mode, btn, creds, sfx = "", tag = "") {
+        busy(btn, true);
+        const body = {
+          mode,
+          username: creds?.username ?? $("username").value,
+          password: creds?.password ?? $("password").value,
+        };
         try {
-          const data = await login(mode);
-          const { query, boundValues, ...payload } = data;
-          el(panel).textContent = pretty(payload);
-          count.textContent = Array.isArray(payload.result) ? rows(payload.result) : "";
-          mitigation(
-            panel === "safeResult" ? "db.get" : "db.all",
-            panel === "safeResult" ? "safeQuery" : "unsafeQuery",
-            panel === "safeResult" ? "safeBinding" : null,
-            panel === "safeResult" ? "safeCall" : "unsafeCall",
-            query,
-            boundValues,
+          const data = await ask(`login:${tag}${mode}`, "/api/login-demo", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          fillLogin(
+            mode,
+            sfx,
+            data,
+            null,
+            mode === "vulnerable" ? [body.username, body.password] : [],
           );
-          settled(panel);
-        } catch (error) {
-          failed(panel, error);
+          return data;
+        } catch (err) {
+          fillLogin(
+            mode,
+            sfx,
+            null,
+            err,
+            mode === "vulnerable" ? [body.username, body.password] : [],
+          );
+          return null;
+        } finally {
+          busy(btn, false);
         }
       }
 
-      el("loadPayloadBtn").addEventListener("click", () => {
-        const preset = el("payloadPreset").value;
-        el("username").value = preset;
-        el("password").value = preset === "alice" ? "pw123" : "anything' OR '1'='1";
-      });
+      /* ---------------- arming a payload ---------------- */
 
-      el("safeBtn").addEventListener("click", () => testLogin("safe", "safeResult"));
-      el("unsafeBtn").addEventListener("click", () => testLogin("vulnerable", "unsafeResult"));
+      function arm(name) {
+        const preset = name ?? $("preset").value;
+        $("username").value = preset;
+        $("password").value = preset === "alice" ? "pw123" : "anything' OR '1'='1";
+        if (name) $("preset").value = name;
+        return preset;
+      }
 
-      el("searchBtn").addEventListener("click", async () => {
-        pending("safeSearchResult");
-        pending("unsafeSearchResult");
-        const term = el("searchTerm").value;
-        try {
-          const response = await fetch(`/api/search-demo?term=${encodeURIComponent(term)}`);
-          const data = await response.json();
-          el("safeSearchResult").textContent = pretty(data.safe);
-          el("unsafeSearchResult").textContent = pretty(data.unsafe);
-          el("safeSearchCount").textContent = rows(data.safe);
-          el("unsafeSearchCount").textContent = rows(data.unsafe);
-          el("searchNote").textContent = data.note || "";
-          mitigation("db.all", "safeSearchQuery", "safeSearchBinding", "safeSearchCall", data.queries?.safe, data.boundValues?.safe);
-          mitigation("db.all", "unsafeSearchQuery", null, "unsafeSearchCall", data.queries?.unsafe, null);
-          settled("safeSearchResult");
-          settled("unsafeSearchResult");
-          restage("searchNote");
-        } catch (error) {
-          failed("safeSearchResult", error);
-          failed("unsafeSearchResult", error);
+      /* ---------------- the pre-run proof ----------------
+         The form is armed with the real bypass before either request
+         leaves, so what the reviewer reads in the fields is exactly the
+         string the records printed.
+         ------------------------------------------------------------- */
+
+      const BYPASS = "' OR '1'='1 --";
+
+      async function proof() {
+        arm(BYPASS);
+        $("proof-note").textContent = "pre-run on load";
+        const [safe, unsafe] = await Promise.all([
+          runLogin("safe", $("safeBtn")),
+          runLogin("vulnerable", $("unsafeBtn")),
+        ]);
+        const stolen = unsafe?.result?.length ?? 0;
+        const held = safe?.result?.length ?? 0;
+        $("proof-note").innerHTML =
+          stolen > held
+            ? `pre-run on load &middot; the same bypass returned <strong>${stolen} rows</strong> the safe path refused`
+            : "pre-run on load";
+      }
+
+      /* ---------------- the preset roll ----------------
+         A batch is not a summary of the payloads; it is the same fanfold
+         running five form feeds, each feeding its safe sheet and then its
+         carbon sheet from the very markup the proof pair uses. One pair at a
+         time, and each gets the carriage to finish before the next tears off,
+         so the reviewer watches five runs instead of one flash.
+         ------------------------------------------------------------- */
+
+      function makePair(sfx, title) {
+        const frag = $("pairTpl").content.cloneNode(true);
+        frag.querySelectorAll("[id]").forEach((el) => {
+          el.id = el.id.replace("{s}", sfx);
+        });
+        const sheet = frag.querySelector(".feed__sheet");
+        sheet.querySelector('[data-t="title"]').textContent = title;
+        /* the clone's rulers are empty: template content is inert, so the
+           ticks are built here, once the ids are final */
+        sheet.querySelectorAll(".ruler").forEach((el) => ruler(el));
+        return sheet;
+      }
+
+      function verdict(held, stolen, safe, unsafe) {
+        if (!safe && !unsafe) return "both paths refused the request";
+        if (!unsafe) return "the interpolated statement was refused by the engine";
+        if (!safe) return "the bound path refused the request";
+        if (stolen > held) {
+          return `${stolen} ${stolen === 1 ? "row" : "rows"} escaped · the bound path returned ${held}`;
         }
-      });
+        return `both paths returned ${held} ${held === 1 ? "row" : "rows"}`;
+      }
+
+      let rollRun = 0;
+
+      async function rollAll(btn) {
+        const run = ++rollRun;
+        busy(btn, true);
+        const feed = $("rollFeed");
+        feed.textContent = "";
+        /* the wait is part of the print, not decoration: reduced motion has
+           already taken the movement away, so it takes the pause too */
+        const wait = matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 900;
+        let printed = 0;
+        try {
+          for (const [i, opt] of [...$("preset").options].entries()) {
+            if (run !== rollRun) return;
+            const title = opt.textContent.trim();
+            const sheet = makePair(`r${i}`, title);
+            feed.append(sheet);
+            /* arm first: the request slip must hold the payload whose sheets
+               are about to print, or the roll is printing something the fields
+               above never said */
+            arm(opt.value);
+            const [safe, unsafe] = await Promise.all([
+              runLogin("safe", null, null, `r${i}`, `roll${run}:`),
+              runLogin("vulnerable", null, null, `r${i}`, `roll${run}:`),
+            ]);
+            if (run !== rollRun) return;
+            const line = verdict(
+              safe?.result?.length ?? 0,
+              unsafe?.result?.length ?? 0,
+              safe,
+              unsafe,
+            );
+            sheet.querySelector('[data-t="note"]').textContent = line;
+            $("rollStatus").textContent = `${title}: ${line}`;
+            printed += 1;
+            if (wait) await new Promise((r) => setTimeout(r, wait));
+          }
+          $("rollStatus").textContent = `${printed} presets printed, each against both paths.`;
+        } finally {
+          if (run === rollRun) busy(btn, false);
+        }
+      }
+
+      /* ---------------- search ---------------- */
+
+      async function runSearch(btn) {
+        const term = $("term").value;
+        busy(btn, true);
+        const safeRec = $("searchSafe");
+        const unsafeRec = $("searchUnsafe");
+        try {
+          const data = await ask(
+            "search",
+            `/api/search-demo?term=${encodeURIComponent(term)}`,
+          );
+          /* The unsafe record is not INJECTED by construction — it becomes an
+           injection when it returned rows the safe path refused. A term like
+           "al" runs the same interpolated statement and leaks nothing, and
+           stamping it INJECTED there would teach the reader to ignore the
+           word. Same rule as the login proof: compare the two counts. */
+          const leaked = (data.unsafe?.length ?? 0) > (data.safe?.length ?? 0);
+          const verdict = leaked ? "injected" : "no injection";
+
+          $("searchSafeStamp").textContent = "safe";
+          $("searchUnsafeStamp").textContent = verdict;
+          safeRec.dataset.outcome = "safe";
+          unsafeRec.dataset.outcome = leaked ? "injected" : "safe";
+
+          printStatement($("searchSafeQuery"), data.queries?.safe);
+          $("searchSafeBound").textContent = pretty(data.boundValues?.safe);
+          $("searchSafeResponse").textContent = pretty(data.safe);
+          tally($("searchSafeTally"), data.safe, "row");
+
+          printStatement($("searchUnsafeQuery"), data.queries?.unsafe, [term], data.executed?.unsafe);
+          $("searchUnsafeResponse").textContent = pretty(data.unsafe);
+          tally($("searchUnsafeTally"), data.unsafe, "row");
+
+          $("searchNote").textContent = data.note || "";
+          $("searchSafeNote").textContent = data.note || "";
+          $("searchUnsafeNote").textContent = data.note || "";
+          printing(safeRec);
+          printing(unsafeRec);
+        } catch (err) {
+          for (const [rec, stamp, res, tal] of [
+            [safeRec, "searchSafeStamp", "searchSafeResponse", "searchSafeTally"],
+            [unsafeRec, "searchUnsafeStamp", "searchUnsafeResponse", "searchUnsafeTally"],
+          ]) {
+            rec.dataset.outcome = "rejected";
+            $(stamp).textContent = "invalid";
+            $(res).textContent = pretty({ error: err.message });
+            $(tal).textContent = "no response";
+          }
+          $("searchNote").textContent = `Search failed: ${err.message}`;
+          settle(safeRec);
+          settle(unsafeRec);
+        } finally {
+          busy(btn, false);
+        }
+      }
+
+      /* ---------------- the reviewer's own statement ----------------
+         Nothing here is interpolated and nothing here is escaped: the statement
+         is the request body, so the record's only job is to report what the
+         engine did with it. The stamp says RAN, never SAFE — this sheet is not
+         evidence that anything was mitigated — and only a statement SQLite
+         refuses earns the alarm hue.
+         ------------------------------------------------------------- */
+
+      function fillScript(data, err) {
+        const el = $("scriptRecord");
+        if (err) {
+          el.dataset.outcome = "rejected";
+          $("scriptStamp").textContent = "invalid";
+          /* the refused statement prints like any other: the reviewer typed
+             it, the engine compiled or rejected it, and the sheet reports
+             which without pretending nothing was sent */
+          const sent = err.body?.query;
+          printStatement($("scriptQuery"), sent || "", [], err.body?.executed);
+          $("scriptCall").textContent = sent ? call("db.all", sent) : "—";
+          $("scriptResponse").textContent = pretty({ error: err.message });
+          $("scriptNote").textContent = err.message;
+          $("scriptTally").textContent =
+            err.status >= 500
+              ? "the engine refused the statement"
+              : err.status === 404
+                ? "no backend behind this page"
+                : err.status
+                  ? "refused before any statement ran"
+                  : "request failed";
+          printing(el);
+          return;
+        }
+
+        delete el.dataset.outcome;
+        $("scriptStamp").textContent = "ran";
+        $("scriptNote").textContent = data.note || "";
+        printStatement($("scriptQuery"), data.query, [], data.executed);
+        $("scriptCall").textContent = call("db.all", data.query);
+        $("scriptResponse").textContent = pretty(data.result);
+        const changed = Number(data.changes) || 0;
+        tally(
+          $("scriptTally"),
+          data.result,
+          "row",
+          changed ? `${changed} ${changed === 1 ? "row" : "rows"} changed` : "",
+        );
+        printing(el);
+      }
+
+      async function runScript(btn) {
+        busy(btn, true);
+        try {
+          const data = await ask("script", "/api/run-script", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ script: $("script").value }),
+          });
+          fillScript(data);
+        } catch (err) {
+          fillScript(null, err);
+        } finally {
+          busy(btn, false);
+        }
+      }
+
+      /* ---------------- wiring ---------------- */
+
+      $("loadBtn").addEventListener("click", () => arm());
+
+      $("safeBtn").addEventListener("click", () => runLogin("safe", $("safeBtn")));
+      $("unsafeBtn").addEventListener("click", () =>
+        runLogin("vulnerable", $("unsafeBtn")),
+      );
+      $("rerunBtn").addEventListener("click", proof);
+      $("rollBtn").addEventListener("click", () => rollAll($("rollBtn")));
+      $("searchBtn").addEventListener("click", () => runSearch($("searchBtn")));
+      $("scriptBtn").addEventListener("click", () => runScript($("scriptBtn")));
 
       fetch("/api/health")
-        .then((response) => response.json())
-        .then((data) => {
-          el("status").textContent = data.ok ? "backend online" : "backend reported a problem";
-          el("status").dataset.state = data.ok ? "up" : "down";
+        .then((r) => r.json())
+        .then((d) => {
+          $("lamp").textContent = d.ok ? "backend online" : "backend reported a problem";
+          $("lamp").dataset.state = d.ok ? "up" : "down";
+          if (!d.ok) proof();
         })
         .catch(() => {
-          el("status").textContent = "backend unreachable";
-          el("status").dataset.state = "down";
+          $("lamp").textContent = "backend unreachable — nothing can print";
+          $("lamp").dataset.state = "down";
         });
+
+      if (document.fonts?.ready) {
+        document.fonts.ready.then(proof);
+      } else {
+        proof();
+      }
     </script>
   </body>
 </html>
