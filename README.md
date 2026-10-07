@@ -48,9 +48,7 @@ The demo highlights this difference and shows how parameterized queries block ma
 ├── package.json
 ├── server.js
 ├── public/
-│   ├── index.html
-│   ├── styles.css
-│   └── app.js
+│   └── index.html
 ├── database.sqlite
 └── .gitignore
 ```
@@ -68,13 +66,21 @@ Then open:
 http://localhost:3000
 ```
 
-## Frontend handoff
+## Backend contract
 
-For frontend implementation details, layout requirements, backend contract, and UI acceptance criteria, see:
+The authoritative API surface is `server.js`:
 
-- [frontend-handoff.md](frontend-handoff.md)
+- `GET /api/health`
+- `POST /api/login-demo` — `{ mode: "safe" | "vulnerable", username, password }`
+- `GET /api/search-demo?term=`
+- `POST /api/run-script` — `{ script }`, runs the reviewer's own SQL verbatim
 
-This file is the handoff document for the person building the interface.
+`/api/run-script` executes exactly what it is given against the local throwaway
+`database.sqlite`: no binding, no escaping, no allow-list. `db.all` compiles one
+statement per call, so anything after the first `;` is reported back as never
+compiled rather than quietly run. Only use it locally.
+
+The frontend lives entirely in `public/index.html` as a single static page.
 
 ## Security focus
 

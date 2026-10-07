@@ -4,7 +4,9 @@
   "description": "A lightweight web demo project for learning and demonstrating SQL injection mitigation techniques.",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node server.js",
+    "pretest": "node -e \"require('child_process').spawn('node',['server.js'],{detached:true,stdio:'ignore'}).unref();setTimeout(()=>process.exit(0),800)\"",
+    "test": "node --test test/api.test.js"
   },
   "repository": {
     "type": "git",
