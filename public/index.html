@@ -1999,12 +1999,15 @@ WHERE username = '' OR '1'='1';</textarea
            stamping it INJECTED there would teach the reader to ignore the
            word. Same rule as the login proof: compare the two counts. */
           const leaked = (data.unsafe?.length ?? 0) > (data.safe?.length ?? 0);
-          const verdict = leaked ? "injected" : "no injection";
+          /* a term like `'` breaks only the interpolated statement: the safe
+             record still printed, the unsafe one was refused by the engine */
+          const broke = Boolean(data.unsafeError);
+          const verdict = broke ? "invalid" : leaked ? "injected" : "no injection";
 
           $("searchSafeStamp").textContent = "safe";
           $("searchUnsafeStamp").textContent = verdict;
           safeRec.dataset.outcome = "safe";
-          unsafeRec.dataset.outcome = leaked ? "injected" : "safe";
+          unsafeRec.dataset.outcome = broke ? "rejected" : leaked ? "injected" : "safe";
 
           printStatement($("searchSafeQuery"), data.queries?.safe);
           $("searchSafeBound").textContent = pretty(data.boundValues?.safe);
@@ -2012,14 +2015,22 @@ WHERE username = '' OR '1'='1';</textarea
           tally($("searchSafeTally"), data.safe, "row");
 
           printStatement($("searchUnsafeQuery"), data.queries?.unsafe, [term], data.executed?.unsafe);
-          $("searchUnsafeResponse").textContent = pretty(data.unsafe);
-          tally($("searchUnsafeTally"), data.unsafe, "row");
+          if (broke) {
+            $("searchUnsafeResponse").textContent = pretty({ error: data.unsafeError });
+            $("searchUnsafeTally").textContent = "no response";
+          } else {
+            $("searchUnsafeResponse").textContent = pretty(data.unsafe);
+            tally($("searchUnsafeTally"), data.unsafe, "row");
+          }
 
           $("searchNote").textContent = data.note || "";
           $("searchSafeNote").textContent = data.note || "";
-          $("searchUnsafeNote").textContent = data.note || "";
+          $("searchUnsafeNote").textContent = broke
+            ? `SQLite refused the interpolated statement: ${data.unsafeError}`
+            : data.note || "";
           printing(safeRec);
-          printing(unsafeRec);
+          if (broke) settle(unsafeRec);
+          else printing(unsafeRec);
         } catch (err) {
           for (const [rec, stamp, res, tal] of [
             [safeRec, "searchSafeStamp", "searchSafeResponse", "searchSafeTally"],
@@ -2121,7 +2132,6 @@ WHERE username = '' OR '1'='1';</textarea
         .then((d) => {
           $("lamp").textContent = d.ok ? "backend online" : "backend reported a problem";
           $("lamp").dataset.state = d.ok ? "up" : "down";
-          if (!d.ok) proof();
         })
         .catch(() => {
           $("lamp").textContent = "backend unreachable — nothing can print";

@@ -20,15 +20,16 @@ const db = new sqlite3.Database(dbPath, (err) => {
 
 function initializeDatabase() {
   db.serialize(() => {
+    /* drop, not DELETE: AUTOINCREMENT would keep counting across restarts and
+       the ids printed on the page would drift */
+    db.run("DROP TABLE IF EXISTS users");
     db.run(`
-      CREATE TABLE IF NOT EXISTS users (
+      CREATE TABLE users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT UNIQUE,
         password TEXT
       )
     `);
-
-    db.run("DELETE FROM users");
 
     const seedUsers = [
       ["alice", "pw123"],
@@ -123,7 +124,7 @@ app.get("/api/health", (req, res) => {
 });
 
 app.post("/api/login-demo", (req, res) => {
-  const { mode = "safe", username = "", password = "" } = req.body;
+  const { mode = "safe", username = "", password = "" } = req.body ?? {};
 
   if (!username || !password) {
     return res
@@ -174,7 +175,7 @@ app.post("/api/login-demo", (req, res) => {
     if (err) {
       return res
         .status(500)
-        .json(buildResponse("safe", "safe", [], err.message));
+        .json(buildResponse("safe", "safe", [], err.message, { query: safeQuery, boundValues }));
     }
 
     return res.json(
@@ -211,14 +212,13 @@ app.get("/api/search-demo", (req, res) => {
       return res.status(500).json({ error: safeErr.message });
     }
 
+    /* the unsafe statement breaking (term `'`) is the lesson, not a server
+       failure: keep the safe rows and report the engine's complaint */
     db.all(unsafeQuery, (unsafeErr, unsafeRows) => {
-      if (unsafeErr) {
-        return res.status(500).json({ error: unsafeErr.message });
-      }
-
       return res.json({
         safe: safeRows,
-        unsafe: unsafeRows,
+        unsafe: unsafeErr ? [] : unsafeRows,
+        unsafeError: unsafeErr ? unsafeErr.message : null,
         queries: { safe: safeQuery, unsafe: unsafeQuery },
         executed: { safe: safeQuery, unsafe: unsafe.executed },
         ignored: { safe: "", unsafe: unsafe.ignored },
@@ -298,6 +298,10 @@ app.post("/api/run-script", (req, res) => {
       },
     );
   });
+});
+
+app.use("/api", (req, res) => {
+  res.status(404).json({ error: `no API route ${req.method} ${req.originalUrl}` });
 });
 
 app.use((req, res) => {

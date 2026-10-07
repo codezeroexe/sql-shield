@@ -102,6 +102,28 @@ test("empty search term returns empties rather than an error", async () => {
   assert.deepEqual(body.unsafe, []);
 });
 
+test("a term that breaks only the unsafe statement keeps the safe rows", async () => {
+  const res = await search("'");
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.deepEqual(body.safe, []);
+  assert.deepEqual(body.unsafe, []);
+  assert.match(body.unsafeError, /SQLITE_ERROR|unrecognized|syntax/i);
+  assert.ok(body.queries.unsafe.includes("'%'%'"), "the broken statement is still reported");
+});
+
+test("a POST with no JSON body is a 400, not a crash", async () => {
+  const res = await fetch(`${BASE}/api/login-demo`, { method: "POST" });
+  assert.equal(res.status, 400);
+  assert.match((await res.json()).error, /required/i);
+});
+
+test("an unknown API path is a JSON 404, not the page", async () => {
+  const res = await fetch(`${BASE}/api/nope`);
+  assert.equal(res.status, 404);
+  assert.match(res.headers.get("content-type"), /json/);
+});
+
 test("health check reports ready", async () => {
   const body = await (await fetch(`${BASE}/api/health`)).json();
   assert.equal(body.ok, true);
