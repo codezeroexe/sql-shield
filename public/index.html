@@ -269,7 +269,7 @@
       }
 
       /* Two readable records side by side need real width: each measured
-         statement is 72 columns wide. Below this they stack instead of
+         statement needs room. Below this they stack instead of
          shrinking into something unreadable. */
       /* One record is not a pair: it takes the whole sheet instead of standing in
          the left column of a grid built for two. */
@@ -386,8 +386,7 @@
         border-top-color: color-mix(in srgb, currentColor 22%, transparent);
       }
 
-      /* the measured statement claims the whole sheet width: 72 columns is
-         a lot of horizontal space and a hanging indent would eat it */
+      /* the statement claims the whole sheet width: a hanging indent would eat it */
       .field--measured {
         grid-template-columns: minmax(0, 1fr);
         gap: 7px;
@@ -415,81 +414,11 @@
         overflow-wrap: anywhere;
       }
 
-      /* ---- the measurement ----
-         One column width, derived once from this element's own font size,
-         so the ruler's ticks, the field-limit rule and the printed
-         characters are guaranteed to be the same width. Deriving it from
-         `ch` anywhere else would silently resolve against a different
-         font size and put the ruler somewhere the text is not.
-         ------------------------------------------------------------- */
-      .measured {
-        position: relative;
-        --col: 0.65em;
-        --cols: 72;
-        font-size: 11px;
-        overflow: hidden;
-      }
-
       .measured .print {
         font-size: 11px;
       }
 
-      .ruler {
-        display: flex;
-        font-size: 11px;
-        margin-bottom: 4px;
-        color: var(--guide);
-        font-variant-numeric: tabular-nums;
-        user-select: none;
-      }
-
-      .ruler span {
-        flex: 0 0 calc(10 * var(--col));
-      }
-
-      /* the last tick before the limit, called out */
-      .ruler span:last-child {
-        color: var(--carbon-2);
-      }
-
-      /* the field limit, at column 72, drawn where the printer stops */
-      .limit {
-        position: absolute;
-        top: 15px;
-        bottom: 0;
-        left: calc(var(--cols) * var(--col));
-        width: 1px;
-        color: var(--carbon-2);
-        background: currentColor;
-        opacity: 0.7;
-      }
-
-      .limit::after {
-        content: "72";
-        position: absolute;
-        bottom: 0;
-        left: 4px;
-        font-size: 11px;
-        color: currentColor;
-        letter-spacing: 0.04em;
-      }
-
-      /* characters the printer could not keep inside the field */
-      .ov {
-        color: var(--carbon);
-        background: color-mix(in srgb, var(--carbon) 16%, transparent);
-        box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--carbon) 70%, transparent);
-      }
-
-      .record[data-flow="unsafe"] .ov {
-        color: var(--alarm);
-        background: color-mix(in srgb, var(--alarm) 22%, transparent);
-        box-shadow: inset 0 -2px 0 var(--alarm);
-      }
-
-      /* the input itself, wherever it landed in the statement. Declared
-         before `.ov` so that characters which are both input AND escapee
-         read as the more urgent fact. */
+      /* the input itself, wherever it landed in the statement */
       .typed {
         background: color-mix(in srgb, var(--carbon) 18%, transparent);
         box-shadow: 0 1px 0 color-mix(in srgb, var(--carbon) 45%, transparent);
@@ -626,6 +555,14 @@
         background-size: 5px 5px, 5px 5px;
         background-repeat: no-repeat;
         padding-right: 30px;
+      }
+
+      /* filled by the preset, never typed into */
+      input[readonly] {
+        background: transparent;
+        border-color: var(--rule-soft);
+        border-bottom-color: var(--rule);
+        cursor: default;
       }
 
       input::placeholder {
@@ -894,25 +831,6 @@
         }
       }
 
-      /* the field limit firing as the carriage reaches column 72. Only a
-         statement that actually overran the field gets this, and it gets a
-         beat of its own rather than a flash inside the wipe: the head has
-         to finish the line before the edge of the paper can react. */
-      @keyframes overrun {
-        0% {
-          color: var(--carbon-2);
-          opacity: 0.7;
-        }
-        30% {
-          color: var(--alarm);
-          opacity: 1;
-        }
-        100% {
-          color: var(--carbon-2);
-          opacity: 0.7;
-        }
-      }
-
       /* a rubber stamp coming down, not bouncing: it is already flat when
          it lands and the opacity is what sells the pressure */
       @keyframes press {
@@ -971,10 +889,6 @@
         animation: press 200ms cubic-bezier(0.2, 0.9, 0.3, 1) var(--stamp-d, 0ms) both;
       }
 
-      .record[data-printing] .measured[data-overflow] .limit {
-        animation: overrun 320ms ease-out calc(var(--d, 0ms) + 190ms) both;
-      }
-
       /* Reduced motion takes away the travel and keeps the fact. No sheet
          feeds, no head sweeps, no limit flares — but the sheet still takes
          ink and the stamp still arrives, because "this was just printed" is
@@ -985,8 +899,7 @@
           animation: none;
         }
 
-        .record[data-printing] :is(.print, .tally, .note),
-        .record[data-printing] .measured[data-overflow] .limit {
+        .record[data-printing] :is(.print, .tally, .note) {
           animation: none;
         }
 
@@ -1000,6 +913,77 @@
         }
       }
 
+      /* ============================ CONSOLE SPLIT ==========================
+         Slips on the left, the sheets they print on the right, so the input
+         and its two readings are on screen together. One endpoint at a time.
+         ==================================================================== */
+
+      [hidden] {
+        display: none !important;
+      }
+
+      .console {
+        display: grid;
+        grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
+        gap: 28px;
+        align-items: start;
+        padding-block: clamp(20px, 3.4vw, 40px);
+      }
+
+      .console__in {
+        position: sticky;
+        top: 16px;
+        display: grid;
+        gap: 16px;
+        max-height: calc(100vh - 32px);
+        overflow-y: auto;
+      }
+
+      /* the right column is ~one sheet wide: records stack, never pair */
+      .console__out .pair {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      .console__in .running {
+        flex-wrap: wrap;
+        row-gap: 2px;
+      }
+
+      .console__out > section + section {
+        margin-top: 32px;
+      }
+
+      .tabs {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        border: 1px solid var(--ink);
+      }
+
+      .tabs button {
+        min-height: 44px;
+        border: 0;
+      }
+
+      .tabs button + button {
+        border-left: 1px solid var(--ink);
+      }
+
+      .tabs button[aria-pressed="true"] {
+        background: var(--ink);
+        color: var(--sheet);
+      }
+
+      @media (max-width: 980px) {
+        .console {
+          grid-template-columns: minmax(0, 1fr);
+        }
+
+        .console__in {
+          position: static;
+          max-height: none;
+        }
+      }
+
       /* ============================== ADAPT ============================== */
 
       @media (max-width: 720px) {
@@ -1009,15 +993,6 @@
 
         .rail {
           background-size: 10px 20px;
-        }
-
-        /* The ruler and the column limit are a measurement, and below the
-           width where 72 columns fit they would be a lie. The character
-           colouring still marks what escaped the field, so the mechanism
-           survives on a phone without the page faking a printout. */
-        .limit,
-        .ruler {
-          display: none;
         }
 
         .field {
@@ -1052,8 +1027,18 @@
       @media print {
         .rail,
         .actions,
+        .tabs,
         .masthead .ident {
           display: none;
+        }
+
+        .console {
+          grid-template-columns: minmax(0, 1fr);
+        }
+
+        .console__in {
+          position: static;
+          max-height: none;
         }
 
         body {
@@ -1077,8 +1062,7 @@
             SQLShield runs the <strong>same classic bypass payload</strong> through
             both query constructions against the same database. Bound as a value it
             can only ever be data. Interpolated into the statement it becomes syntax,
-            and prints back every row it was never allowed to see. The printer's field
-            is 72 columns wide — that width is the entire lesson.
+            and prints back every row it was never allowed to see.
           </p>
           <div class="ident">
             <span class="ident__mark">SQLShield Demo</span>
@@ -1087,11 +1071,134 @@
           </div>
         </header>
 
-        <section class="band" aria-labelledby="proof-h">
+        <div class="console">
+          <aside class="console__in" aria-label="Requests">
+            <div class="tabs" role="group" aria-label="Endpoint">
+              <button type="button" data-tab="login" aria-pressed="true">Login</button>
+              <button type="button" data-tab="search" aria-pressed="false">Search</button>
+              <button type="button" data-tab="script" aria-pressed="false">Own SQL</button>
+            </div>
+
+            <div class="slip" data-panel="login">
+            <div class="running">
+              <p class="running__name" id="console-h">Request slip</p>
+              <span class="running__note">POST /api/login-demo</span>
+            </div>
+            <div class="fields">
+              <label class="field-label">
+                <span>Payload preset</span>
+                <select id="preset">
+                  <option value="alice">Normal login</option>
+                  <option value="' OR '1'='1 --">Classic bypass</option>
+                  <option value="admin' --">Admin bypass</option>
+                  <option value="' UNION SELECT id, username FROM users --">
+                    Union payload
+                  </option>
+                  <option value="' OR 1">Broken statement</option>
+                  <option value="custom">Custom &mdash; type your own</option>
+                </select>
+              </label>
+              <label class="field-label">
+                <span>Username</span>
+                <input
+                  id="username"
+                  readonly
+                  tabindex="-1"
+                  type="text"
+                  value="alice"
+                  autocomplete="off"
+                  spellcheck="false"
+                />
+              </label>
+              <label class="field-label">
+                <span>Password</span>
+                <input
+                  id="password"
+                  readonly
+                  tabindex="-1"
+                  type="text"
+                  value="pw123"
+                  autocomplete="off"
+                  spellcheck="false"
+                />
+              </label>
+            </div>
+            <div class="actions">
+              <button id="runBtn" type="button" data-role="primary">
+                Print both sheets
+              </button>
+              <button id="rollBtn" type="button">Print every preset</button>
+            </div>
+            <p class="sr-only" id="rollStatus" role="status"></p>
+            </div>
+
+            <div class="slip" data-panel="search" hidden>
+            <div class="running">
+              <p class="running__name" id="search-in-h">Search slip</p>
+              <span class="running__note">GET /api/search-demo?term=</span>
+            </div>
+            <div class="fields">
+              <label class="field-label">
+                <span>Search term</span>
+                <input
+                  id="term"
+                  type="text"
+                  value="a"
+                  autocomplete="off"
+                  spellcheck="false"
+                />
+              </label>
+            </div>
+            <div class="actions">
+              <button id="searchBtn" type="button" data-role="primary">
+                Run comparison
+              </button>
+            </div>
+            </div>
+
+            <div class="slip" data-panel="script" hidden>
+            <div class="running">
+              <p class="running__name" id="script-in-h">Your own statement</p>
+              <span class="running__note">POST /api/run-script</span>
+            </div>
+            <div class="fields">
+              <label class="field-label">
+                <span>SQL statement</span>
+                <textarea
+                  id="script"
+                  rows="4"
+                  spellcheck="false"
+                  autocomplete="off"
+                  autocapitalize="off"
+                  autocorrect="off"
+                >SELECT id, username FROM users
+WHERE username = '' OR '1'='1';</textarea
+                >
+              </label>
+            </div>
+            <p class="notice">
+              This runs <strong>exactly as typed</strong> against the live demo
+              database. It can read every row, and it can write.
+              <code>database.sqlite</code> is deleted and reseeded from four
+              hardcoded users on every boot, and it holds no real credentials.
+              <code>db.all</code> compiles one statement per call, so anything
+              you type after the first <code>;</code> is reported as never
+              compiled rather than quietly run.
+            </p>
+            <div class="actions">
+              <button id="scriptBtn" type="button" data-role="primary">
+                Run statement
+              </button>
+            </div>
+            </div>
+          </aside>
+
+          <div class="console__out">
+            <section data-panel="login" aria-labelledby="proof-h">
           <div class="running">
             <p class="running__name" id="proof-h">Proof</p>
             <span class="running__note" id="proof-note"
-              >pre-run on load &middot; payload <code>' OR '1'='1 --</code></span
+              >same input &middot; both paths</span
             >
           </div>
           <div class="pair">
@@ -1104,8 +1211,6 @@
               <div class="field field--measured">
                 <span class="field__name">query</span>
                 <div class="field__body measured">
-                  <div class="ruler" id="safeRuler" aria-hidden="true"></div>
-                  <span class="limit" aria-hidden="true"></span>
                   <pre class="print" id="safeQuery"></pre>
                 </div>
               </div>
@@ -1145,8 +1250,6 @@
               <div class="field field--measured">
                 <span class="field__name">query</span>
                 <div class="field__body measured">
-                  <div class="ruler" id="unsafeRuler" aria-hidden="true"></div>
-                  <span class="limit" aria-hidden="true"></span>
                   <pre class="print" id="unsafeQuery"></pre>
                 </div>
               </div>
@@ -1178,116 +1281,19 @@
               </p>
             </article>
           </div>
-        </section>
-
-        <section class="band" aria-labelledby="console-h">
-          <div class="running">
-            <p class="running__name" id="console-h">Request slip</p>
-            <span class="running__note">fill it in, tear it off, send it</span>
-          </div>
-          <div class="slip">
-            <div class="fields">
-              <label class="field-label">
-                <span>Username</span>
-                <input
-                  id="username"
-                  type="text"
-                  value="alice"
-                  autocomplete="off"
-                  spellcheck="false"
-                />
-              </label>
-              <label class="field-label">
-                <span>Password</span>
-                <input
-                  id="password"
-                  type="text"
-                  value="pw123"
-                  autocomplete="off"
-                  spellcheck="false"
-                />
-              </label>
-              <label class="field-label">
-                <span>Payload preset</span>
-                <select id="preset">
-                  <option value="alice">Normal login</option>
-                  <option value="' OR '1'='1 --">Classic bypass</option>
-                  <option value="admin' --">Admin bypass</option>
-                  <option value="' UNION SELECT id, username FROM users --">
-                    Union payload
-                  </option>
-                  <option value="' OR 1">Broken statement</option>
-                </select>
-              </label>
-            </div>
-            <div class="actions">
-              <button id="safeBtn" type="button" data-role="primary">
-                Test safe login
-              </button>
-              <button id="unsafeBtn" type="button" data-role="unsafe">
-                Test vulnerable login
-              </button>
-              <button id="loadBtn" type="button">Load payload</button>
-              <button id="rerunBtn" type="button">Re-run proof</button>
-            </div>
-          </div>
-        </section>
-
-        <section class="band" aria-labelledby="roll-h">
-          <div class="running">
-            <p class="running__name" id="roll-h">Preset roll</p>
-            <span class="running__note"
-              >every payload &middot; both paths &middot; one form feed each</span
-            >
-          </div>
-          <div class="slip">
-            <p class="slip__lede">
-              A menu of five payloads is still a menu &mdash; it is a list of
-              attacks the author picked. Print the whole roll and every one of
-              them runs at both paths in turn, so the spread is evidence rather
-              than a claim. The request slip is armed to each payload as its
-              sheets print, so the fields above always hold exactly what is on
-              the sheet below them.
-            </p>
-            <div class="actions">
-              <button id="rollBtn" type="button" data-role="primary">
-                Print all presets
-              </button>
-            </div>
-            <p class="sr-only" id="rollStatus" role="status"></p>
-          </div>
           <div class="feed" id="rollFeed">
             <p class="feed__idle">
-              Nothing on the roll yet. Print all presets to run every payload
+              Nothing on the roll yet. Print every preset to run every payload
               through both paths &mdash; five form feeds, ten sheets.
             </p>
           </div>
-        </section>
+            </section>
 
-        <section class="band" aria-labelledby="search-h">
-          <div class="running">
-            <p class="running__name" id="search-h">Search record</p>
-            <span class="running__note">GET /api/search-demo?term=</span>
-          </div>
-          <div class="slip">
-            <div class="fields">
-              <label class="field-label">
-                <span>Search term</span>
-                <input
-                  id="term"
-                  type="text"
-                  value="a"
-                  autocomplete="off"
-                  spellcheck="false"
-                />
-              </label>
+            <section data-panel="search" aria-labelledby="search-h" hidden>
+            <div class="running">
+              <p class="running__name" id="search-h">Search record</p>
+              <span class="running__note">safe and unsafe, same term</span>
             </div>
-            <div class="actions">
-              <button id="searchBtn" type="button" data-role="primary">
-                Run comparison
-              </button>
-            </div>
-          </div>
           <div class="pair" style="margin-top: 22px">
             <article class="record" id="searchSafe" data-flow="safe">
               <span class="stamp" id="searchSafeStamp">safe</span>
@@ -1298,8 +1304,6 @@
               <div class="field field--measured">
                 <span class="field__name">query</span>
                 <div class="field__body measured">
-                  <div class="ruler" id="searchSafeRuler" aria-hidden="true"></div>
-                  <span class="limit" aria-hidden="true"></span>
                   <pre class="print" id="searchSafeQuery"></pre>
                 </div>
               </div>
@@ -1325,8 +1329,6 @@
               <div class="field field--measured">
                 <span class="field__name">query</span>
                 <div class="field__body measured">
-                  <div class="ruler" id="searchUnsafeRuler" aria-hidden="true"></div>
-                  <span class="limit" aria-hidden="true"></span>
                   <pre class="print" id="searchUnsafeQuery"></pre>
                 </div>
               </div>
@@ -1347,46 +1349,13 @@
             </article>
           </div>
           <p class="why" id="searchNote" style="color: var(--ink-2)" aria-live="polite"></p>
-        </section>
+            </section>
 
-        <section class="band" aria-labelledby="script-h">
-          <div class="running">
-            <p class="running__name" id="script-h">Your own statement</p>
-            <span class="running__note"
-              >POST /api/run-script &middot; nothing between it and sqlite3</span
-            >
-          </div>
-          <div class="slip">
-            <div class="fields">
-              <label class="field-label">
-                <span>SQL statement</span>
-                <textarea
-                  id="script"
-                  rows="4"
-                  spellcheck="false"
-                  autocomplete="off"
-                  autocapitalize="off"
-                  autocorrect="off"
-                >SELECT id, username FROM users
-WHERE username = '' OR '1'='1';</textarea
-                >
-              </label>
+            <section data-panel="script" aria-labelledby="script-h" hidden>
+            <div class="running">
+              <p class="running__name" id="script-h">Statement record</p>
+              <span class="running__note">nothing between it and sqlite3</span>
             </div>
-            <p class="notice">
-              This runs <strong>exactly as typed</strong> against the live demo
-              database. It can read every row, and it can write.
-              <code>database.sqlite</code> is deleted and reseeded from four
-              hardcoded users on every boot, and it holds no real credentials.
-              <code>db.all</code> compiles one statement per call, so anything
-              you type after the first <code>;</code> is reported as never
-              compiled rather than quietly run.
-            </p>
-            <div class="actions">
-              <button id="scriptBtn" type="button" data-role="primary">
-                Run statement
-              </button>
-            </div>
-          </div>
           <div class="pair pair--single" style="margin-top: 22px">
             <article class="record" id="scriptRecord">
               <span class="stamp" id="scriptStamp">not run</span>
@@ -1397,8 +1366,6 @@ WHERE username = '' OR '1'='1';</textarea
               <div class="field field--measured">
                 <span class="field__name">statement</span>
                 <div class="field__body measured">
-                  <div class="ruler" id="scriptRuler" aria-hidden="true"></div>
-                  <span class="limit" aria-hidden="true"></span>
                   <pre class="print" id="scriptQuery"></pre>
                 </div>
               </div>
@@ -1422,7 +1389,7 @@ WHERE username = '' OR '1'='1';</textarea
               <p class="note" id="scriptNote" aria-live="polite"></p>
             </article>
           </div>
-        </section>
+            </section>
 
         <section class="band" aria-labelledby="skeleton-h">
           <div class="running">
@@ -1456,6 +1423,8 @@ WHERE username = '' OR '1'='1';</textarea
             </li>
           </ol>
         </section>
+          </div>
+        </div>
 
         <template id="pairTpl">
           <div class="feed__sheet">
@@ -1473,8 +1442,6 @@ WHERE username = '' OR '1'='1';</textarea
                 <div class="field field--measured">
                   <span class="field__name">query</span>
                   <div class="field__body measured">
-                    <div class="ruler" id="safeRuler{s}" aria-hidden="true"></div>
-                    <span class="limit" aria-hidden="true"></span>
                     <pre class="print" id="safeQuery{s}"></pre>
                   </div>
                 </div>
@@ -1507,8 +1474,6 @@ WHERE username = '' OR '1'='1';</textarea
                 <div class="field field--measured">
                   <span class="field__name">query</span>
                   <div class="field__body measured">
-                    <div class="ruler" id="unsafeRuler{s}" aria-hidden="true"></div>
-                    <span class="limit" aria-hidden="true"></span>
                     <pre class="print" id="unsafeQuery{s}"></pre>
                   </div>
                 </div>
@@ -1566,37 +1531,17 @@ WHERE username = '' OR '1'='1';</textarea
 
       const $ = (id) => document.getElementById(id);
       const pretty = (v) => JSON.stringify(v, null, 2);
-      const FIELD = 72; /* the printer's field width, in characters */
-
-      /* ---------------- the column ruler ---------------- */
-
-      const ruler = (host) => {
-        if (host.childElementCount) return;
-        for (let col = 0; col < FIELD; col += 10) {
-          const tick = document.createElement("span");
-          tick.textContent = String(col).padStart(2, "0");
-          host.append(tick);
-        }
-      };
-
-      ["safeRuler", "unsafeRuler", "searchSafeRuler", "searchUnsafeRuler", "scriptRuler"].forEach((id) =>
-        ruler($(id)),
-      );
 
       /* ---------------- printing a statement ----------------
-         The statement is printed exactly as the server built it, with three
-         marks laid over it: where the user's own input landed, every
-         character the printer could not keep inside the 72-column field, and
-         the tail the database driver threw away without compiling. All three
-         are computed from the real strings, not drawn by eye.
+         The statement is printed exactly as the server built it, with two
+         marks laid over it: where the user's own input landed, and the tail
+         the database driver threw away without compiling. Both are computed
+         from the real strings, not drawn by eye.
          ------------------------------------------------------------- */
 
       function printStatement(host, text, inputs = [], executed = text) {
         host.textContent = "";
-        /* cleared here, not at the end: an empty statement must not leave a
-           previous run's overflow claim standing over a blank field */
         const box = host.closest(".measured");
-        box?.removeAttribute("data-overflow");
         box?.removeAttribute("data-discarded");
         if (!text) return;
 
@@ -1605,7 +1550,6 @@ WHERE username = '' OR '1'='1';</textarea
            is the length of that prefix, not its position — it always starts
            at the beginning. */
         const ran = executed ? executed.length : text.length;
-        let escaped = false;
         const spans = [];
         for (const raw of inputs) {
           if (!raw) continue;
@@ -1618,24 +1562,8 @@ WHERE username = '' OR '1'='1';</textarea
           box?.setAttribute("data-discarded", "");
         }
 
-        /* A printer's field is 72 columns on every line it prints, not 72
-           columns across the whole block. Column is therefore counted from
-           the start of the current line, which matters the moment a statement
-           has a line break in it — the reviewer's own script, or anything
-           wrapped onto a second printed line. */
-        const lineStart = (pos) => {
-          const nl = text.lastIndexOf("\n", pos - 1);
-          return nl < 0 ? 0 : nl + 1;
-        };
-
-        const edges = new Set([0, text.length, FIELD, ran]);
+        const edges = new Set([0, text.length, ran]);
         spans.forEach((s) => edges.add(s.from).add(s.to));
-        /* a mark must not straddle a line break, or one class would cover two
-           columns of two different printed lines */
-        for (let nl = text.indexOf("\n"); nl >= 0; nl = text.indexOf("\n", nl + 1)) {
-          edges.add(nl);
-          edges.add(nl + 1);
-        }
         const cuts = [...edges].filter((e) => e >= 0 && e <= text.length).sort((a, b) => a - b);
 
         const frag = document.createDocumentFragment();
@@ -1644,32 +1572,19 @@ WHERE username = '' OR '1'='1';</textarea
           const to = cuts[i + 1];
           if (to <= from) continue;
           /* `pop`, not `find`: the dropped tail is pushed on last so it wins
-             the overlap with `typed`, the same way `.ov` beats `.typed`
-             in the cascade. Whether it ran is the more urgent fact. */
+             the overlap with `typed`. Whether it ran is the more urgent fact. */
           const cls = spans.filter((s) => from >= s.from && from < s.to).pop();
-          const over = from - lineStart(from) >= FIELD;
-          if (over) escaped = true;
           const part = text.slice(from, to);
-          if (!cls && !over) {
+          if (!cls) {
             frag.append(part);
             continue;
           }
           const node = document.createElement("span");
-          /* a character can be three things at once — typed input, past the
-             field limit, and past the point the driver compiled. The order
-             here is the order of urgency: whether it ran beats where it
-             landed, and where it landed beats that it was typed. */
-          const parts = [];
-          if (cls) parts.push(cls.cls);
-          if (over) parts.push("ov");
-          node.className = parts.join(" ");
+          node.className = cls.cls;
           node.textContent = part;
           frag.append(node);
         }
         host.append(frag);
-        /* the field limit is allowed to fire only for a statement that
-           actually overran it — see the `overrun` keyframes */
-        if (escaped) box?.setAttribute("data-overflow", "");
       }
 
       /* ---------------- the carriage, without forcing layout ----------------
@@ -1878,9 +1793,19 @@ WHERE username = '' OR '1'='1';</textarea
 
       function arm(name) {
         const preset = name ?? $("preset").value;
+        if (name) $("preset").value = name;
+        /* only the custom preset hands the fields to the reader */
+        const custom = preset === "custom";
+        for (const id of ["username", "password"]) {
+          $(id).readOnly = !custom;
+          $(id).tabIndex = custom ? 0 : -1;
+        }
+        if (custom) {
+          $("username").focus();
+          return preset;
+        }
         $("username").value = preset;
         $("password").value = preset === "alice" ? "pw123" : "anything' OR '1'='1";
-        if (name) $("preset").value = name;
         return preset;
       }
 
@@ -1892,19 +1817,27 @@ WHERE username = '' OR '1'='1';</textarea
 
       const BYPASS = "' OR '1'='1 --";
 
-      async function proof() {
-        arm(BYPASS);
-        $("proof-note").textContent = "pre-run on load";
+      async function runBoth(btn = $("runBtn")) {
+        busy(btn, true);
         const [safe, unsafe] = await Promise.all([
-          runLogin("safe", $("safeBtn")),
-          runLogin("vulnerable", $("unsafeBtn")),
+          runLogin("safe", null),
+          runLogin("vulnerable", null),
         ]);
+        busy(btn, false);
         const stolen = unsafe?.result?.length ?? 0;
         const held = safe?.result?.length ?? 0;
-        $("proof-note").innerHTML =
-          stolen > held
-            ? `pre-run on load &middot; the same bypass returned <strong>${stolen} rows</strong> the safe path refused`
-            : "pre-run on load";
+        const note = $("proof-note");
+        note.textContent = "same input · both paths";
+        if (stolen > held) {
+          note.append(" · the unsafe path returned ");
+          note.appendChild(document.createElement("strong")).textContent = `${stolen} row${stolen === 1 ? "" : "s"}`;
+          note.append(" the safe path refused");
+        }
+      }
+
+      async function proof() {
+        arm(BYPASS);
+        await runBoth();
       }
 
       /* ---------------- the preset roll ----------------
@@ -1922,9 +1855,6 @@ WHERE username = '' OR '1'='1';</textarea
         });
         const sheet = frag.querySelector(".feed__sheet");
         sheet.querySelector('[data-t="title"]').textContent = title;
-        /* the clone's rulers are empty: template content is inert, so the
-           ticks are built here, once the ids are final */
-        sheet.querySelectorAll(".ruler").forEach((el) => ruler(el));
         return sheet;
       }
 
@@ -1952,6 +1882,7 @@ WHERE username = '' OR '1'='1';</textarea
         try {
           for (const [i, opt] of [...$("preset").options].entries()) {
             if (run !== rollRun) return;
+            if (opt.value === "custom") continue;
             const title = opt.textContent.trim();
             const sheet = makePair(`r${i}`, title);
             feed.append(sheet);
@@ -2116,13 +2047,26 @@ WHERE username = '' OR '1'='1';</textarea
 
       /* ---------------- wiring ---------------- */
 
-      $("loadBtn").addEventListener("click", () => arm());
-
-      $("safeBtn").addEventListener("click", () => runLogin("safe", $("safeBtn")));
-      $("unsafeBtn").addEventListener("click", () =>
-        runLogin("vulnerable", $("unsafeBtn")),
+      const tabs = document.querySelectorAll(".tabs button");
+      tabs.forEach((tab) =>
+        tab.addEventListener("click", () => {
+          tabs.forEach((t) => t.setAttribute("aria-pressed", t === tab));
+          document.querySelectorAll("[data-panel]").forEach((panel) => {
+            panel.hidden = panel.dataset.panel !== tab.dataset.tab;
+          });
+        })
       );
-      $("rerunBtn").addEventListener("click", proof);
+
+      /* picking a preset is the whole request: fill the slip and print */
+      $("preset").addEventListener("change", () => {
+        if (arm() !== "custom") runBoth();
+      });
+      for (const id of ["username", "password"]) {
+        $(id).addEventListener("keydown", (e) => {
+          if (e.key === "Enter" && !$(id).readOnly) runBoth();
+        });
+      }
+      $("runBtn").addEventListener("click", () => runBoth());
       $("rollBtn").addEventListener("click", () => rollAll($("rollBtn")));
       $("searchBtn").addEventListener("click", () => runSearch($("searchBtn")));
       $("scriptBtn").addEventListener("click", () => runScript($("scriptBtn")));
