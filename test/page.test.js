@@ -42,7 +42,7 @@ beforeEach(async () => {
 });
 
 async function openPage(opts = {}) {
-  const dom = await JSDOM.fromURL(BASE + "/", {
+  const dom = await JSDOM.fromURL(BASE + "/" + (opts.hash || ""), {
     runScripts: "dangerously",
     resources: "usable",
     pretendToBeVisual: true,
@@ -53,179 +53,238 @@ async function openPage(opts = {}) {
       win.Element.prototype.scrollIntoView = () => {};
       if (!win.matchMedia)
         win.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
-      if (!win.document.fonts)
-        Object.defineProperty(win.document, "fonts", {
-          value: { ready: Promise.resolve(), check: () => true, load: () => Promise.resolve([]) },
-        });
     },
   });
   return dom.window;
 }
 
-// open page, run fn(win, helpers), always close
+// fetch wrapper that records "METHOD path" for every page request
+const spy = (calls, stub) => (real) => (url, init) => {
+  calls.push(`${init?.method || "GET"} ${url}`);
+  return (stub && stub(url, init)) || real(url, init);
+};
+const json = (status, body) =>
+  Promise.resolve(new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } }));
+
 async function withPage(fn, opts = {}) {
   const win = await openPage(opts);
   try {
-    const $ = (id) => win.document.getElementById(id);
-    const stamps = () => [...win.document.querySelectorAll(".stamp")].map((s) => s.textContent.trim());
-    const hasStamp = (w) => until(() => stamps().includes(w));
-    const verdict = () => $("verdict").textContent.replace(/\s+/g, " ");
-    const loaded = () => until(() => /0 rows/.test(verdict()) && /4 rows/.test(verdict()));
-    const key = (el, init) => el.dispatchEvent(new win.KeyboardEvent("keydown", { bubbles: true, ...init }));
-    const type = (el, v) => {
-      el.value = v;
-      el.dispatchEvent(new win.Event("input", { bubbles: true }));
+    const d = win.document;
+    const $ = (id) => d.getElementById(id);
+    const q = (sel) => d.querySelector(sel);
+    const text = (sel) => (q(sel)?.textContent || "").replace(/\s+/g, " ").trim();
+    const visible = () => [...d.querySelectorAll("[data-screen]")].filter((s) => !s.hidden).map((s) => s.dataset.screen);
+    const go = async (hash) => {
+      win.location.hash = hash;
+      await until(() => visible().join() === hash.replace(/^#\//, ""));
     };
-    await fn({ win, $, stamps, hasStamp, verdict, loaded, key, type });
+    const key = (el, init) => el.dispatchEvent(new win.KeyboardEvent("keydown", { bubbles: true, ...init }));
+    const settled = (sel) => until(() => text(sel) && !/Asking the database/.test(text(sel)));
+    await fn({ win, d, $, q, text, visible, go, key, settled });
   } finally {
     win.close();
   }
 }
 
-test("load: proof prints and lamp online", () =>
-  withPage(async ({ $, verdict, loaded }) => {
-    await loaded();
-    assert.match(verdict(), /0 rows/);
-    assert.match(verdict(), /4 rows/);
-    assert.match($("lamp").textContent, /online/);
+test("empty hash shows home with one section and title", () =>
+  withPage(async ({ d, visible }) => {
+    await until(() => visible().join() === "home");
+    assert.equal(d.title, "SQLShield · How SQL injection works, and how to stop it");
   }));
 
-test("empty fields flag both inputs, focus username, stamp refused", () =>
-  withPage(async ({ $, win, loaded, key, type, hasStamp }) => {
-    await loaded();
-    $("username").value = "";
-    $("password").value = "";
-    key($("username"), { key: "Enter" });
-    await hasStamp("refused");
-    assert.equal($("username").getAttribute("aria-invalid"), "true");
-    assert.equal($("password").getAttribute("aria-invalid"), "true");
-    assert.equal(win.document.activeElement.id, "username");
-    type($("username"), "a");
-    assert.equal($("username").hasAttribute("aria-invalid"), false);
+test("home shows live counts 8 and 0", () =>
+  withPage(async ({ text }) => {
+    await until(() => text("#hmU") === "8 users" && text("#hmS") === "0 users");
   }));
 
-test("preset arms the form; no load button", () =>
-  withPage(async ({ $, win, loaded }) => {
-    await loaded();
-    const opt = [...$("preset").options].find((o) => /Classic/.test(o.textContent));
-    $("preset").value = opt.value;
-    $("preset").dispatchEvent(new win.Event("change", { bubbles: true }));
-    assert.equal($("username").value, "' OR '1'='1 --");
-    assert.equal($("username").value, opt.value);
-    assert.equal($("loadBtn"), null);
+test("home Start the lessons goes to learn/1", () =>
+  withPage(async ({ q, visible }) => {
+    await until(() => visible().join() === "home");
+    const a = q(".home__acts a.primary");
+    assert.equal(a.getAttribute("href"), "#/learn/1");
+    a.click();
+    await until(() => visible().join() === "learn/1");
   }));
 
-for (const mod of ["ctrlKey", "metaKey"]) {
-  test(`own statement runs on ${mod} + Enter`, () =>
-    withPage(async ({ $, loaded, key, hasStamp }) => {
-      await loaded();
-      $("script").value = "SELECT username FROM users";
-      key($("script"), { key: "Enter", [mod]: true });
-      await hasStamp("ran");
-    }));
-}
-
-test("saved statement persists, restore clears it", () =>
-  withPage(async ({ $, win, loaded, type }) => {
-    await loaded();
-    type($("script"), "SELECT 2");
-    assert.equal(win.localStorage.getItem("sqlshield.script"), "SELECT 2");
-    $("restoreBtn").click();
-    assert.equal($("script").value, $("script").defaultValue);
-    assert.equal(win.localStorage.getItem("sqlshield.script"), null);
+test("rail hidden on home, visible on learn/1; wordmark links to home", () =>
+  withPage(async ({ win, q, go, visible }) => {
+    await until(() => visible().join() === "home");
+    assert.equal(win.getComputedStyle(q(".rail")).display, "none");
+    await go("#/learn/1");
+    assert.notEqual(win.getComputedStyle(q(".rail")).display, "none");
+    assert.equal(q(".rail__brand").getAttribute("href"), "#/");
   }));
 
-test("engine error stamp", () =>
-  withPage(async ({ $, loaded, hasStamp }) => {
-    await loaded();
-    $("script").value = "SELEKT 1";
-    $("scriptBtn").click();
-    await hasStamp("engine error");
+test("unknown hash goes home", () =>
+  withPage(async ({ visible }) => {
+    await until(() => visible().join() === "home");
+  }, { hash: "#/nope" }));
+
+test("each rail link shows its section and is the only aria-current", () =>
+  withPage(async ({ d, win, visible }) => {
+    const links = [...d.querySelectorAll(".rail__link")];
+    assert.equal(links.length, 9);
+    for (const a of links) {
+      a.click();
+      const want = a.getAttribute("href").slice(2);
+      await until(() => visible().join() === want);
+      const cur = [...d.querySelectorAll('.rail__link[aria-current="page"]')];
+      assert.deepEqual(cur, [a], want);
+    }
   }));
 
-test("refused script stamp; server stays up", () =>
-  withPage(async ({ $, loaded, hasStamp }) => {
-    await loaded();
-    $("script").value = "COMMIT";
-    $("scriptBtn").click();
-    await hasStamp("refused");
-    assert.equal((await fetch(BASE + "/api/health")).status, 200);
+test("arrow keys move between lessons and are ignored in inputs", () =>
+  withPage(async ({ win, d, key, go, visible }) => {
+    await go("#/learn/1");
+    key(d.body, { key: "ArrowRight" });
+    await until(() => visible().join() === "learn/2");
+    key(d.body, { key: "ArrowLeft" });
+    await until(() => visible().join() === "learn/1");
+    await go("#/learn/2");
+    key(d.getElementById("l2u"), { key: "ArrowRight" });
+    await new Promise((r) => setTimeout(r, 150));
+    assert.deepEqual(visible(), ["learn/2"]);
   }));
 
-test("reset restores users and reruns proof", () =>
-  withPage(async ({ $, loaded, verdict, hasStamp }) => {
-    await loaded();
-    $("script").value = "DROP TABLE users";
-    $("scriptBtn").click();
-    await until(() => $("scriptTally").textContent.trim() || $("scriptNote").textContent.trim());
-    $("resetBtn").click();
-    await until(() => $("resetNote").textContent === "Database reset. 4 users restored.");
-    await until(() => /4 rows/.test(verdict()));
+test("lesson 6 Next points to the login tester", () =>
+  withPage(async ({ q, go }) => {
+    await go("#/learn/6");
+    assert.equal(q('[data-screen="learn/6"] .explain__nav a.next').getAttribute("href"), "#/lab/login");
   }));
 
-test("offline stamp", () => {
-  let down = false;
+test("lesson 2 shows 8 users for the unsafe login", () =>
+  withPage(async ({ q, text, go, settled }) => {
+    await go("#/learn/2");
+    q("#l2b").click();
+    await settled('[data-screen="learn/2"] .out');
+    assert.equal(text('[data-screen="learn/2"] .big'), "8 users");
+  }));
+
+test("lesson 4 shows 4 unsafe and 0 safe", () =>
+  withPage(async ({ text, go, settled }) => {
+    await go("#/learn/4");
+    await settled('[data-screen="learn/4"] .out');
+    assert.equal(text('[data-screen="learn/4"] .card.unsafe .cnt'), "8 users");
+    assert.equal(text('[data-screen="learn/4"] .card.safe .cnt'), "0 users");
+  }));
+
+test("no learn screen shows raw JSON", () =>
+  withPage(async ({ q, text, go, settled }) => {
+    for (let i = 1; i <= 6; i++) {
+      await go("#/learn/" + i);
+      if (i === 2) q("#l2b").click();
+      if (i === 5) q("#l5b").click();
+      if (i !== 6) await settled(`[data-screen="learn/${i}"] .out`);
+      const t = q(`[data-screen="learn/${i}"]`).textContent;
+      assert.doesNotMatch(t, /"result"\s*:/, `learn/${i}`);
+      assert.doesNotMatch(t, /"label"\s*:/, `learn/${i}`);
+      assert.ok(t.length > 50, `learn/${i} empty`);
+    }
+  }));
+
+test("banner: damaged, server down, intact", async () => {
+  const health = (stub) => ({ fetch: spy([], (u) => /api\/health/.test(u) && stub()) });
+  await withPage(async ({ text, $ }) => {
+    await until(() => !$("banner").hidden);
+    assert.match(text("#bannerText"), /The users table was deleted/);
+  }, health(() => json(200, { ok: true, db: "damaged", users: 0 })));
+  await withPage(async ({ text, $ }) => {
+    await until(() => !$("banner").hidden);
+    assert.match(text("#bannerText"), /The demo server is not running/);
+  }, health(() => json(503, { ok: false })));
+  await withPage(async ({ text, $ }) => {
+    await until(() => !$("banner").hidden);
+    assert.match(text("#bannerText"), /The demo server is not running/);
+  }, health(() => Promise.reject(new TypeError("Failed to fetch"))));
+  await withPage(async ({ $ }) => {
+    await until(() => $("dbUsers").textContent === "8 users");
+    assert.equal($("banner").hidden, true);
+  });
+});
+
+test("rail footer shows 8 users; Reset posts /api/reset", () => {
+  const calls = [];
   return withPage(
-    async ({ $, loaded, hasStamp }) => {
-      await loaded();
-      down = true;
-      $("rerunBtn").click();
-      await hasStamp("offline");
+    async ({ $, text }) => {
+      await until(() => $("dbUsers").textContent === "8 users");
+      $("resetBtn").click();
+      await until(() => text("#resetNote") === "Database reset. 8 users restored.");
+      assert.ok(calls.includes("POST /api/reset"), calls.join());
     },
-    { fetch: (real) => (...a) => (down ? Promise.reject(new TypeError("Failed to fetch")) : real(...a)) },
+    { fetch: spy(calls) },
   );
 });
 
-test("server timeout stamp", () => {
-  let stub = false;
+test("login tester: example fills fields; Run both shows leak vs held", () =>
+  withPage(async ({ win, $, q, text, go, settled }) => {
+    await go("#/lab/login");
+    const pick = (v) => {
+      $("lgX").value = v;
+      $("lgX").dispatchEvent(new win.Event("change", { bubbles: true }));
+    };
+    pick("alice");
+    assert.equal($("lgU").value, "alice");
+    assert.equal($("lgP").value, "pw123");
+    pick("' OR 1=1 --");
+    assert.equal($("lgU").value, "' OR 1=1 --");
+    assert.equal($("lgP").value, "x");
+    $("lgB").click();
+    await settled("#lgOut");
+    assert.equal(text(".card.unsafe .cnt"), "8 rows");
+    assert.equal(text(".card.unsafe .verdict"), "Leaked: your text changed the question.");
+    assert.equal(text(".card.safe .verdict"), "Held: your text stayed a value.");
+  }));
+
+test("search tester shows 8 vs 0", () =>
+  withPage(async ({ $, text, go, settled }) => {
+    await go("#/lab/search");
+    $("seT").value = "x' OR 1=1 --";
+    $("seB").click();
+    await settled("#seOut");
+    assert.equal(text(".card.unsafe .cnt"), "8 rows");
+    assert.equal(text(".card.safe .cnt"), "0 rows");
+  }));
+
+test("sandbox runs a count and restores the example", () =>
+  withPage(async ({ $, d, text, go, settled }) => {
+    await go("#/lab/sandbox");
+    const example = $("sqS").defaultValue;
+    $("sqS").value = "SELECT count(*) FROM users";
+    $("sqB").click();
+    await settled("#sqOut");
+    assert.equal(text("#sqOut .cnt"), "1 row");
+    assert.equal(d.querySelectorAll("#sqOut tbody tr").length, 1);
+    assert.match(text("#sqOut tbody td"), /^8$/);
+    $("sqR").click();
+    assert.equal($("sqS").value, example);
+    assert.match(example, /username/);
+  }));
+
+test("log polls /api/trace on Lab screens only", () => {
+  const calls = [];
+  const traces = () => calls.filter((c) => /api\/trace/.test(c)).length;
   return withPage(
-    async ({ $, loaded, hasStamp }) => {
-      await loaded();
-      stub = true;
-      $("unsafeBtn").click();
-      await hasStamp("timed out");
+    async ({ go }) => {
+      await new Promise((r) => setTimeout(r, 1800));
+      assert.equal(traces(), 0, "learn screen polled");
+      await go("#/lab/login");
+      await until(() => traces() > 0);
+      await go("#/learn/1");
+      const n = traces();
+      await new Promise((r) => setTimeout(r, 1800));
+      assert.equal(traces(), n, "polled after leaving the lab");
     },
-    {
-      fetch: (real) => (url, init) =>
-        /login-demo/.test(String(url)) && init?.method === "POST" && stub
-          ? Promise.resolve(
-              new Response(
-                JSON.stringify({
-                  label: "vulnerable",
-                  status: "rejected",
-                  result: [],
-                  note: "Stopped after 6 seconds: the statement ran longer than the demo allows and was interrupted. No rows came back.",
-                  timedOut: true,
-                }),
-                { status: 504, headers: { "content-type": "application/json" } },
-              ),
-            )
-          : real(url, init),
-    },
+    { fetch: spy(calls), hash: "#/learn/1" },
   );
 });
 
-test("client timeout stamp and tally", { timeout: 20000 }, () => {
-  let hang = false;
-  return withPage(
-    async ({ $, win, loaded, type, hasStamp }) => {
-      await loaded();
-      hang = true;
-      type($("username"), "alice");
-      type($("password"), "pw123");
-      $("safeBtn").click();
-      await until(() => $("safeStamp").textContent.trim() === "timed out", 12000);
-      assert.match($("safeTally").textContent, /8 seconds/);
-    },
-    {
-      fetch: (real) => (url, init) =>
-        hang
-          ? new Promise((_, rej) =>
-              init?.signal?.addEventListener("abort", () =>
-                rej(new DOMException("aborted", "AbortError")),
-              ),
-            )
-          : real(url, init),
-    },
-  );
-});
+test("removed chrome stays removed", () =>
+  withPage(async ({ d, $ }) => {
+    await until(() => $("dbUsers").textContent === "8 users");
+    const t = d.body.textContent.toLowerCase();
+    assert.ok(!t.includes("backend online"));
+    assert.ok(!t.includes("print evidence"));
+    const script = [...d.querySelectorAll("script")].map((s) => s.textContent).join("\n");
+    assert.ok(script.length > 1000);
+    assert.doesNotMatch(script, /AudioContext/);
+  }));

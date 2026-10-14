@@ -23,7 +23,7 @@ Express, middleware in this order (server.js):
    7. SPA fallback      anything else -> public/index.html
    8. error handler     bad JSON -> 400, body too large -> 413, else 500
    v
-one sqlite3 connection (`db`), in memory, seeded with 4 users
+one sqlite3 connection (`db`), in memory, seeded with 8 users
 ```
 
 Notes on the order:
@@ -105,7 +105,7 @@ The HTTP status decides success, not the body: the server's failure records reus
 ### Other pieces
 
 - **Lamp.** `setLamp("checking" | "up" | "down")` writes the status pill. `checkHealth()` polls `/api/health` every 10 s while the tab is visible. A failed `ask` also flips it.
-- **Proof and verdict row.** On load, after fonts are ready and `checkHealth()` succeeds, `proof()` arms the classic bypass (`arm(BYPASS)`), sends the safe and vulnerable logins together, then `setVerdict` fills the `#verdict` row (for example "0 rows" and "4 rows"). Reset calls `proof()` again.
+- **Proof and verdict row.** On load, after fonts are ready and `checkHealth()` succeeds, `proof()` arms the classic bypass (`arm(BYPASS)`), sends the safe and vulnerable logins together, then `setVerdict` fills the `#verdict` row (for example "0 rows" and "8 rows"). Reset calls `proof()` again.
 - **Printing.** `fillLogin`, `runSearch` and `fillScript` fill the sheets. `printStatement` marks typed input, characters past column 72 (`FIELD`) and the discarded tail (`ignored`), computed from the real strings. `printing(record)` replays the print animation.
 - **Search stamp.** The unsafe search sheet is stamped `injected` only when `unsafe` has more rows than `safe`; otherwise `no injection`.
 - **Shortcuts and wiring (bottom of the script).** Enter in the username or password field runs both logins. Enter in the search box runs search. Cmd or Ctrl plus Enter in the script box runs the script. Choosing a preset calls `arm()`; there is no separate load button.

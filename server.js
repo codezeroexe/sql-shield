@@ -63,6 +63,66 @@ app.use((req, res, next) => {
 });
 
 app.use(express.json({ limit: "100kb" }));
+
+/* ponytail: in-memory, one process; move to shared storage if this ever runs as more than one instance. */
+const TRACE_MAX = 50;
+const trace = [];
+let traceId = 0;
+function record(entry) {
+  trace.push({ id: ++traceId, at: Date.now(), ...entry });
+  if (trace.length > TRACE_MAX) trace.shift();
+}
+
+const TRACED = { "POST /api/login-demo": "login", "GET /api/search-demo": "search", "POST /api/run-script": "script", "POST /api/reset": "reset" };
+
+app.use((req, res, next) => {
+  const route = TRACED[`${req.method} ${req.path}`];
+  if (!route) return next();
+  const start = process.hrtime.bigint();
+  const json = res.json.bind(res);
+  res.json = (body) => {
+    try {
+      const b = body || {};
+      const http = res.statusCode;
+      const ms = Math.round(Number(process.hrtime.bigint() - start) / 1e5) / 10;
+      const outcome = b.timedOut || http === 504 ? "timeout" : http === 400 ? "refused" : http >= 500 ? "error" : "ok";
+      const base = { route, ms, http, outcome };
+      const mode = req.body && req.body.mode;
+      if (b.error) {
+        const path = route === "login" ? (mode === "safe" ? "bound" : mode === "vulnerable" ? "pasted" : null) : route === "script" ? "pasted" : null;
+        record({ ...base, path, sql: null, bound: null, rows: null, note: b.error });
+      } else if (route === "login") {
+        record({
+          ...base,
+          path: b.label === "safe" ? "bound" : "pasted",
+          sql: b.executed ?? b.query ?? null,
+          bound: b.boundValues ?? null,
+          rows: Array.isArray(b.result) ? b.result.length : null,
+          note: b.status === "rejected" || http >= 500 ? b.note ?? null : null,
+        });
+      } else if (route === "search") {
+        record({ ...base, path: "bound", sql: b.executed?.safe ?? b.queries?.safe ?? null, bound: b.boundValues?.safe ?? null, rows: b.safe?.length ?? null, note: null });
+        record({ ...base, path: "pasted", sql: b.executed?.unsafe ?? b.queries?.unsafe ?? null, bound: null, rows: b.unsafe?.length ?? null, note: null });
+      } else if (route === "script") {
+        record({
+          ...base,
+          path: "pasted",
+          sql: b.executed ?? null,
+          bound: null,
+          rows: b.result?.length ?? null,
+          changes: b.changes ?? null,
+          note: b.status === "rejected" ? b.note ?? null : null,
+        });
+      } else {
+        record({ ...base, path: null, sql: "-- reset: drop every object, reseed 8 users", bound: null, rows: null, note: b.message ?? b.error ?? null });
+      }
+    } catch (e) {
+      console.error("trace failed:", e);
+    }
+    return json(body);
+  };
+  next();
+});
 app.use(express.static(path.join(__dirname, "public")));
 
 let server = null;
@@ -112,6 +172,10 @@ function seed(cb) {
       ["bob", "hunter2"],
       ["admin", "rootpass"],
       ["charlie", "letmein"],
+      ["dave", "sunshine"],
+      ["erin", "qwerty12"],
+      ["frank", "dragon99"],
+      ["grace", "iloveyou"],
     ].map((u) => ["INSERT INTO users (username, password) VALUES (?, ?)", ...u]),
   ];
 
@@ -240,10 +304,17 @@ function splitStatements(sql) {
   return { executed: sql, ignored: "" };
 }
 
+/* Connection first, then the demo table: a script can drop `users`, and the
+   page needs to say so instead of reporting a healthy backend. */
 app.get("/api/health", (req, res) => {
   db.get("SELECT 1 AS ok", (err) => {
     if (err) return res.status(503).json({ ok: false, message: "database unavailable." });
-    res.json({ ok: true, message: "SQLShield Demo backend is running." });
+    db.get("SELECT count(*) AS n FROM users", (countErr, row) => {
+      if (countErr) {
+        return res.json({ ok: true, db: "damaged", users: 0, message: "users table missing." });
+      }
+      res.json({ ok: true, db: "intact", users: row.n, message: "SQLShield Demo backend is running." });
+    });
   });
 });
 
@@ -270,7 +341,7 @@ app.post("/api/reset", (req, res) => {
           if (i === drops.length) {
             return seed((seedErr) => {
               if (seedErr) return fail(seedErr);
-              res.json({ ok: true, users: 4, message: "Database reset. 4 users restored." });
+              res.json({ ok: true, users: 8, message: "Database reset. 8 users restored." });
             });
           }
           db.run(drops[i], (dropErr) => (dropErr ? fail(dropErr) : next(i + 1)));
@@ -493,9 +564,15 @@ function runLocked(script, executed, ignored, res, release) {
   /* `changes()` is connection-wide and reports the last write, so the
      statement and the read of its own change count are queued together inside
      one transaction: nothing another request queued can slip between them and
-     be counted for this one. */
+     be counted for this one. The count itself is the difference in
+     total_changes() around the statement. */
   db.serialize(() => {
     db.run("BEGIN", noop);
+
+    let before = null;
+    db.get("SELECT total_changes() AS t", (e, r) => {
+      before = e ? null : r.t;
+    });
 
     let outcome = null;
     queryRows(executed, [], (err, rows, meta) => {
@@ -503,7 +580,7 @@ function runLocked(script, executed, ignored, res, release) {
     });
 
     db.get(
-      "SELECT changes() AS changes, last_insert_rowid() AS lastID",
+      "SELECT total_changes() AS total, changes() AS changes, last_insert_rowid() AS lastID",
       (probeErr, meta) => {
         db.run("COMMIT", (commitErr) => {
           if (commitErr) db.run("ROLLBACK", noop);
@@ -532,13 +609,16 @@ function runLocked(script, executed, ignored, res, release) {
               .status(500)
               .json(buildResponse("custom", "rejected", [], outcome.err.message, detail));
           } else {
-            /* `changes()` keeps reporting the last write, so on a statement that
-               only reads it is a stale number from someone else's row. Claiming
-               one would be worse than reporting none, so a leading read keyword
-               means zero and the record reports only the rows it really got. */
+            /* changes() keeps the last write's count across reads and DDL, so the
+               count is taken as the difference in total_changes() around this
+               statement; DDL and reads therefore report 0. */
             const readsOnly = /^\s*(select|pragma|explain|with)\b/i.test(executed);
-            detail.changes = readsOnly || probeErr ? 0 : meta?.changes ?? 0;
-            detail.lastID = readsOnly || probeErr ? null : meta?.lastID ?? null;
+            detail.changes =
+              readsOnly || probeErr || before === null
+                ? 0
+                : Math.max(0, (meta?.total ?? before) - before);
+            detail.lastID =
+              readsOnly || probeErr || detail.changes === 0 ? null : meta?.lastID ?? null;
 
             let note = ignored
               ? "Sent as the statement body — no binding, no escaping. SQLite compiled the first statement exactly as typed and discarded the rest."
@@ -556,6 +636,15 @@ function runLocked(script, executed, ignored, res, release) {
     );
   });
 }
+
+app.get("/api/trace", (req, res) => {
+  const a = req.query.after;
+  if (a !== undefined && !(typeof a === "string" && /^\d+$/.test(a))) {
+    return res.status(400).json({ error: "after must be a whole number." });
+  }
+  const after = a === undefined ? 0 : Number(a);
+  res.json({ entries: trace.filter((e) => e.id > after), last: traceId });
+});
 
 /* unknown API paths get JSON, not the SPA shell */
 app.use((req, res, next) => {

@@ -4,8 +4,8 @@ Status as of 2026-10-14. Open items are tracked in LEVELS.md.
 
 ## Backend (`server.js`, `package.json`, `database.sqlite`)
 
-- [ ] Plaintext passwords in seed (`alice/pw123`, `bob/hunter2`, etc.) → hash (bcrypt/scrypt) even for demo, or mark clearly non-auth. — by design: PRODUCT.md says "No production authentication, no real credentials, no secrets"; the four seeded users are throwaway demo data.
-- [ ] `DELETE FROM users` + reseed on every boot wipes data → seed only if empty (`INSERT OR IGNORE` / count check). — by design: PRODUCT.md says the database is reseeded from a hardcoded list of four users on every boot, so there is no persisted state to protect.
+- [ ] Plaintext passwords in seed (`alice/pw123`, `bob/hunter2`, etc.) → hash (bcrypt/scrypt) even for demo, or mark clearly non-auth. — by design: PRODUCT.md says "No production authentication, no real credentials, no secrets"; the eight seeded users are throwaway demo data.
+- [ ] `DELETE FROM users` + reseed on every boot wipes data → seed only if empty (`INSERT OR IGNORE` / count check). — by design: PRODUCT.md says the database is reseeded from a hardcoded list of eight users on every boot, so there is no persisted state to protect.
 - [x] `database.sqlite` committed to git + overwritten at runtime → gitignore it, seed on first run. — done: `git ls-files` lists no sqlite file, `*.sqlite` is in `.gitignore`, and the default database is `:memory:` (server.js `DB_PATH`).
 - [ ] `/api/run-script` allows arbitrary writes (`DROP`, `DELETE`, `INSERT`, `UPDATE`) → restrict to `SELECT` allowlist or read-only connection; currently destructive by design. — by design: PRODUCT.md "Constraints" keeps the statement box with no allow-list by user decision; the page prints a warning that it can write.
 - [x] No input length / size caps on `username`, `password`, `term`, `script` → add max lengths + `express.json({limit})`. — done: server.js caps login and search fields at 200 chars, the script at 10000, and `express.json({ limit: "100kb" })`; tests "login rejects bad mode, non-string, oversized and empty input" and "run-script refuses a script over 10000 characters".

@@ -159,7 +159,7 @@ test("a custom script runs verbatim and returns real rows", async () => {
   assert.equal(res.status, 200);
   const body = await res.json();
   assert.equal(body.status, "ran");
-  assert.equal(body.result.length, 4);
+  assert.equal(body.result.length, 8);
   assert.deepEqual(body.boundValues, null, "nothing was bound or escaped");
 });
 
@@ -167,7 +167,7 @@ test("a custom script can hand over the whole table in one statement", async () 
   const body = await (
     await script("SELECT id, username, password FROM users WHERE username = '' OR '1'='1'")
   ).json();
-  assert.equal(body.result.length, 4, "the classic condition, written by hand");
+  assert.equal(body.result.length, 8, "the classic condition, written by hand");
   assert.match(body.note, /exactly as typed/i);
 });
 
@@ -305,7 +305,7 @@ test("reset restores users after a script drops the table", async () => {
   assert.equal(res.status, 200);
   const body = await res.json();
   assert.equal(body.ok, true);
-  assert.equal(body.users, 4);
+  assert.equal(body.users, 8);
   const back = await login("safe", "alice", "pw123");
   assert.equal(back.status, 200);
   assert.equal((await back.json()).result.length, 1);
@@ -365,6 +365,29 @@ test("health reports ok true", async () => {
   assert.equal((await res.json()).ok, true);
 });
 
+test("health reports an intact database with 8 users", async () => {
+  await reset();
+  const res = await health();
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.ok, true);
+  assert.equal(body.db, "intact");
+  assert.equal(body.users, 8);
+});
+
+test("health reports a damaged database after DROP TABLE users", async () => {
+  await reset();
+  await script("DROP TABLE users");
+  const res = await health();
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.db, "damaged");
+  assert.equal(body.users, 0);
+  assert.equal(body.message, "users table missing.");
+  await reset();
+  assert.equal((await (await health()).json()).db, "intact");
+});
+
 test("five concurrent script writes each land exactly once", async () => {
   await reset();
   const results = await Promise.all(
@@ -377,7 +400,23 @@ test("five concurrent script writes each land exactly once", async () => {
     assert.equal((await res.json()).changes, 1);
   }
   const body = await (await script("SELECT count(*) AS n FROM users")).json();
-  assert.equal(body.result[0].n, 9);
+  assert.equal(body.result[0].n, 13);
+});
+
+test("run-script reports 0 changes for DDL after a write", async () => {
+  await reset();
+  const write = await (
+    await script("UPDATE users SET username = username WHERE id = 1")
+  ).json();
+  assert.equal(write.changes, 1);
+
+  const create = await script("CREATE TABLE x5_probe (a)");
+  assert.equal(create.status, 200);
+  assert.equal((await create.json()).changes, 0);
+
+  const drop = await (await script("DROP TABLE x5_probe")).json();
+  assert.equal(drop.changes, 0);
+  await reset();
 });
 
 /* ---- DNS rebinding: Host header must be a loopback name ----
@@ -540,4 +579,147 @@ test("port already in use exits 1 with a clear message", async () => {
   } finally {
     await new Promise((resolve) => blocker.close(resolve));
   }
+});
+
+/* ---- /api/trace ---- */
+const getTrace = async (after) => {
+  const res = await fetch(`${BASE}/api/trace${after === undefined ? "" : `?after=${after}`}`);
+  return { res, body: await res.json() };
+};
+
+test("trace records a bound login with its values", async () => {
+  const { body: { last } } = await getTrace();
+  await (await login("safe", "alice", "pw123")).json();
+  const { body } = await getTrace(last);
+  assert.equal(body.entries.length, 1);
+  const e = body.entries[0];
+  assert.equal(e.route, "login");
+  assert.equal(e.path, "bound");
+  assert.deepEqual(e.bound, ["alice", "pw123"]);
+  assert.equal(e.rows, 1);
+  assert.equal(e.outcome, "ok");
+  assert.equal(e.http, 200);
+  assert.equal(typeof e.ms, "number");
+  assert.ok(e.sql.includes("?"));
+});
+
+test("trace records the pasted bypass with no bound values", async () => {
+  const { body: { last } } = await getTrace();
+  await (await login("vulnerable", "' OR 1=1 --", "x")).json();
+  const { body } = await getTrace(last);
+  assert.equal(body.entries.length, 1);
+  const e = body.entries[0];
+  assert.equal(e.path, "pasted");
+  assert.equal(e.bound, null);
+  assert.equal(e.rows, 8);
+  assert.ok(e.sql.includes("OR 1=1"));
+});
+
+test("trace records search as two statements", async () => {
+  const { body: { last } } = await getTrace();
+  await (await search("al")).json();
+  const { body } = await getTrace(last);
+  assert.deepEqual(body.entries.map((e) => [e.route, e.path]), [["search", "bound"], ["search", "pasted"]]);
+});
+
+test("trace records a refused request", async () => {
+  const { body: { last } } = await getTrace();
+  const res = await login("other", "a", "b");
+  await res.json();
+  const { body } = await getTrace(last);
+  assert.equal(body.entries.length, 1);
+  const e = body.entries[0];
+  assert.equal(e.outcome, "refused");
+  assert.equal(e.http, 400);
+  assert.equal(typeof e.note, "string");
+  assert.ok(e.note.length > 0);
+});
+
+test("trace keeps only the last 50", async () => {
+  for (let i = 0; i < 30; i++) await (await search("al")).json();
+  const { body } = await getTrace();
+  assert.equal(body.entries.length, 50);
+  assert.equal(body.entries.at(-1).id, body.last);
+});
+
+test("trace rejects a bad after", async () => {
+  const { res, body } = await getTrace("abc");
+  assert.equal(res.status, 400);
+  assert.equal(body.error, "after must be a whole number.");
+});
+
+test("trace does not record health or trace", async () => {
+  const { body: { last } } = await getTrace();
+  await (await fetch(`${BASE}/api/health`)).json();
+  await getTrace();
+  const { body } = await getTrace(last);
+  assert.equal(body.entries.length, 0);
+});
+
+/* ---- reset racing a long script ---- */
+
+const LONG_SCRIPT =
+  "WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM c LIMIT 30000000) SELECT count(*) AS n FROM c";
+
+test("reset during a long script leaves an intact database", { timeout: 20000 }, async () => {
+  await reset();
+  const scriptStart = performance.now();
+  let scriptDoneAt = 0;
+  let resetDoneAt = 0;
+  const scriptP = script(LONG_SCRIPT).then((res) => {
+    scriptDoneAt = performance.now();
+    return res;
+  });
+  const resetP = fetch(`${BASE}/api/reset`, { method: "POST" }).then((res) => {
+    resetDoneAt = performance.now();
+    return res;
+  });
+  const [s, r] = await Promise.all([scriptP, resetP]);
+  const scriptMs = scriptDoneAt - scriptStart;
+  assert.ok(scriptMs > 1000, `script finished in ${scriptMs} ms, too fast to overlap`);
+  assert.ok([200, 504].includes(s.status), `script must finish or time out, got ${s.status}`);
+  assert.ok(resetDoneAt <= scriptDoneAt || s.status === 504);
+  assert.equal(r.status, 200);
+  await s.text();
+  await r.text();
+
+  const body = await (await health()).json();
+  assert.equal(body.db, "intact");
+  assert.equal(body.users, 8);
+
+  const back = await login("safe", "alice", "pw123");
+  assert.equal(back.status, 200);
+  assert.equal((await back.json()).result.length, 1);
+});
+
+test("login and search answer correctly while a long script runs", { timeout: 20000 }, async () => {
+  await reset();
+  const scriptStart = performance.now();
+  let scriptDoneAt = 0;
+  const pending = script(LONG_SCRIPT).then((res) => {
+    scriptDoneAt = performance.now();
+    return res;
+  });
+  const [safeRes, vulnRes, searchRes] = await Promise.all([
+    login("safe", "alice", "pw123"),
+    login("vulnerable", "' OR 1=1 --", "x"),
+    search("al"),
+  ]);
+
+  assert.equal(safeRes.status, 200);
+  assert.equal((await safeRes.json()).result.length, 1);
+
+  assert.equal(vulnRes.status, 200);
+  assert.equal((await vulnRes.json()).result.length, 8);
+
+  assert.equal(searchRes.status, 200);
+  const body = await searchRes.json();
+  assert.equal(body.safe.length, 1);
+  assert.equal(body.unsafe.length, 1);
+
+  const pendingRes = await pending;
+  const scriptMs = scriptDoneAt - scriptStart;
+  assert.ok(scriptMs > 1000, `script finished in ${scriptMs} ms, too fast to overlap`);
+  assert.ok([200, 504].includes(pendingRes.status), `script must finish or time out, got ${pendingRes.status}`);
+  await pendingRes.text();
 });

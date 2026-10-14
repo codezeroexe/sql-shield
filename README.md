@@ -28,16 +28,16 @@ The demo highlights this difference and shows how parameterized queries block ma
 
 Open the page at http://127.0.0.1:3000. On load it runs the classic bypass through both paths, so the proof is already printed when the page opens.
 
-- **Verdict row.** Shows `bound → N rows` for the safe path and `interpolated → N rows` for the vulnerable one. After load it reads 0 and 4. If the server is unreachable, both words show `offline`. **Re-run proof** arms the request slip with the classic bypass and runs both paths again.
+- **Verdict row.** Shows `bound → N rows` for the safe path and `interpolated → N rows` for the vulnerable one. After load it reads 0 and 8. If the server is unreachable, both words show `offline`. **Re-run proof** arms the request slip with the classic bypass and runs both paths again.
 - **Request slip.** Username, Password and Payload preset fields, then two send buttons: **Test safe login** and **Test vulnerable login**. Pressing Enter in either field sends both. Empty fields are refused and marked. The preset menu has five entries: Normal login, Classic bypass, Admin bypass, Union payload and Broken statement. Choosing one fills the two fields. It sends nothing.
 - **Print all presets.** Runs every preset through both paths and prints one sheet per path for each, ten sheets in all.
-- **Search.** The term defaults to `a`. **Run comparison** runs the safe and unsafe search queries. With `a`, both return admin, alice and charlie, so the unsafe record reads "no injection". With `' OR '1'='1`, the safe query returns no rows and the unsafe query returns all four users, and the record reads "injected". With `a' UNION SELECT id, password FROM users --`, the unsafe query returns the stored passwords in the username column.
+- **Search.** The term defaults to `a`. **Run comparison** runs the safe and unsafe search queries. With `a`, both return admin, alice, charlie, dave, frank and grace, so the unsafe record reads "no injection". With `' OR '1'='1`, the safe query returns no rows and the unsafe query returns all eight users, and the record reads "injected". With `a' UNION SELECT id, password FROM users --`, the unsafe query returns the stored passwords in the username column.
 - **Your own statement.** Type SQL and press Ctrl/⌘ + Enter or **Run statement**. The statement runs exactly as typed. Some examples:
-  - `SELECT * FROM users` returns all four users with their passwords.
+  - `SELECT * FROM users` returns all eight users with their passwords.
   - `SELECT sql FROM sqlite_master WHERE name = 'users'` returns the table's `CREATE` statement.
   - `UPDATE users SET password = 'x' WHERE username = 'alice'` reports one row changed. Then log in as alice with `x` on either path: it succeeds. With `pw123` on the safe path it returns no rows.
-  - `SELECT id, username FROM users; DROP TABLE users` returns the four users. The record reports `DROP TABLE users` as discarded, and the table is still there.
-  - `DROP TABLE users` runs. A login after it fails with `engine error` and the message `no such table: users`. **Reset database** restores the four users.
+  - `SELECT id, username FROM users; DROP TABLE users` returns the eight users. The record reports `DROP TABLE users` as discarded, and the table is still there.
+  - `DROP TABLE users` runs. A login after it fails with `engine error` and the message `no such table: users`. **Reset database** restores the eight users.
 
 Stamps on the records:
 
@@ -137,17 +137,17 @@ Press "Reset database" on the page, or run:
 curl -X POST http://127.0.0.1:3000/api/reset
 ```
 
-A reset drops every table, view, trigger and index, including anything created through the statement box, and restores the four users. Restarting the server also reseeds the users.
+A reset drops every table, view, trigger and index, including anything created through the statement box, and restores the eight users. Restarting the server also reseeds the users.
 
 ### If the server died
 
-Restart it with `npm start`. With the default in-memory database, the earlier data is gone and the four users are reseeded, and nothing else is lost. With a `DB_PATH` file, the users are reseeded and the other tables in the file stay as they were.
+Restart it with `npm start`. With the default in-memory database, the earlier data is gone and the eight users are reseeded, and nothing else is lost. With a `DB_PATH` file, the users are reseeded and the other tables in the file stay as they were.
 
 ### Pre-demo checklist
 
 - [ ] Run `npm test` and confirm all tests pass.
 - [ ] Start the server with `npm start` and open http://127.0.0.1:3000.
-- [ ] Confirm the status lamp reads "backend online" and the verdict reads "bound → 0 rows, interpolated → 4 rows".
+- [ ] Confirm the status lamp reads "backend online" and the verdict reads "bound → 0 rows, interpolated → 8 rows".
 - [ ] Press "Reset database".
 - [ ] Check the projector at 1280×720.
 - [ ] Bring a charged laptop and keep it on power.
@@ -196,9 +196,9 @@ No input.
 
 ### `POST /api/reset`
 
-No input. Drops every table, view, trigger and index in the database, including any created through `run-script`, then reseeds the four users (`alice`, `bob`, `admin`, `charlie`).
+No input. Drops every table, view, trigger and index in the database, including any created through `run-script`, then reseeds the eight users (`alice`, `bob`, `admin`, `charlie`, `dave`, `erin`, `frank`, `grace`).
 
-- 200: `{ "ok": true, "users": 4, "message": "Database reset. 4 users restored." }`
+- 200: `{ "ok": true, "users": 8, "message": "Database reset. 8 users restored." }`
 - 500: `{ "error": "reset failed: <message>" }`
 
 ### `POST /api/login-demo`
@@ -229,6 +229,8 @@ Body: `script`, a non-blank string of 10000 characters or fewer.
 - 400: the script is missing, blank or not a string; it is over 10000 characters; nothing comes before the first `;`; or it opens with a blocked keyword. Body: `{ "error": "<message>" }`.
 - 500: the engine refused the statement. The record has `status: "rejected"` and `note` holds the engine message. `ATTACH` lands here. See the limits below.
 - 504: the statement hit the 6-second limit. The record has `status: "rejected"`, `result: []`, and `timedOut: true`.
+
+The `changes` count is the difference in SQLite's total change counter around the statement, so DDL reports 0; writes made by triggers a script created are counted too.
 
 ### Errors from the framework
 
@@ -264,6 +266,14 @@ PAGE_BASE=http://127.0.0.1:3000 node --test test/page.test.js
 ```
 
 The tests call `POST /api/reset` to get a clean database, so running them against a server you are presenting from resets its data as well.
+
+### Load test
+
+```bash
+npm run load
+```
+
+`scripts/load.js` starts its own server on a free port and runs 20 concurrent clients for 10 seconds. Each client loops over bound login, pasted login (`' OR 1=1 --`) and search. It prints the request count, errors, requests per second and p50, p95 and max latency, then `PASS` or `FAIL`. The budget is p95 under 50 ms and no errors. This is far above what one presenter and an instructor need on localhost.
 
 ## Security focus
 

@@ -346,3 +346,16 @@ Text always names the state in words.
   a sheet sitting on a roll.
 - **Don't** use monospace as a costume for "technical". Here it is the printer's
   only font, and it is carrying real statements, values, and driver calls.
+
+## Performance budget
+
+- Page: `public/index.html` at most 120 kB, one self-hosted font file (Azeret Mono, 26 kB). No external requests.
+- First verdict: printed within 1.5 s of load on localhost.
+- Animate only `transform`, `opacity`, `scale` and `clip-path`. No layout properties in keyframes.
+- At most one infinite loop (the lamp filament while checking). The health poll and any loop stop while the tab is hidden.
+- Input handlers (typing in the request slip) must finish in under 16 ms.
+- Weak devices: when `navigator.hardwareConcurrency <= 4` or `navigator.deviceMemory <= 4`, the page sets `data-lite` on `<html>` and takes the reduced-motion path (no feed, no carriage, stamp fades in).
+
+## Motion tokens
+
+All durations live in `:root`: `--t-fast` 130ms, `--t-lamp` 240ms, `--t-feed` 420ms, `--t-advance` 90ms (per printed line), `--t-ink` 340ms, `--t-carriage` 260ms, `--t-overrun` 320ms, `--t-overrun-lag` 190ms, `--t-stamp` 200ms, `--t-filament` 900ms; easing `--ease-feed`. One mechanism drives them: the `data-printing` attribute on `.record`.

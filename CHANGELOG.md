@@ -5,7 +5,7 @@ Changes to the demo, newest first.
 ## Unreleased
 
 ### Added
-- In-memory database reseeded with four demo users on every start, and `POST /api/reset` to drop and restore it.
+- In-memory database reseeded with eight demo users on every start, and `POST /api/reset` to drop and restore it.
 - `POST /api/run-script` runs a custom statement, capped at 10000 characters, and reports what executed and what was discarded.
 - Server binds to 127.0.0.1 by default, configurable with the `HOST`, `PORT` and `DB_PATH` environment variables, and these are validated at start-up.
 - Host header check that accepts only loopback names while bound to loopback, plus security headers (CSP, `nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, same-origin policies) on every response.

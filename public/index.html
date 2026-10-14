@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SQLShield — SQL Injection Mitigation</title>
+    <title>SQLShield</title>
     <meta
       name="description"
       content="Compare unsafe SQL construction with parameterized queries."
@@ -39,6 +39,8 @@
         --carbon-wash: #e5e0ee;
         /* a statement the parser refused */
         --alarm: #9d2f1d;
+        /* a ribbon running dry: the request is slow, not failed */
+        --warn: #8a5a12;
 
         --guide: #626d7a; /* column numbers: faint, but they are read, not decoration */
         --sel: #d6cdea; /* selection reads as a highlighter swipe */
@@ -53,17 +55,18 @@
         --t-lamp: 240ms;
         --t-feed: 420ms;
         --ease-feed: cubic-bezier(0.16, 0.84, 0.28, 1);
+        --t-advance: 90ms;
+        --t-ink: 340ms;
+        --t-carriage: 260ms;
+        --t-overrun: 320ms;
+        --t-overrun-lag: 190ms;
+        --t-stamp: 200ms;
+        --t-filament: 900ms;
       }
 
-      * {
-        box-sizing: border-box;
-      }
 
-      html {
-        -webkit-text-size-adjust: 100%;
-        scrollbar-color: var(--rule) var(--paper);
-      }
-
+      * { box-sizing: border-box; }
+      html { -webkit-text-size-adjust: 100%; scrollbar-color: var(--rule) var(--paper); }
       body {
         margin: 0;
         background: var(--paper);
@@ -73,1648 +76,360 @@
         -webkit-font-smoothing: antialiased;
         text-rendering: optimizeLegibility;
       }
+      ::selection { background: var(--sel); color: var(--ink); }
+      h1, h2, h3, p, ol, figure { margin: 0; }
+      [hidden] { display: none !important; }
+      :focus-visible { outline: 2px solid var(--carbon); outline-offset: 2px; }
 
-      /* Browser surfaces the design still has to own. */
-      ::selection {
-        background: var(--sel);
-        color: var(--ink);
-      }
-
-      input::selection,
-      textarea::selection {
-        background: var(--carbon-2);
-        color: #fff;
-      }
-
-      ::-webkit-scrollbar {
-        width: 11px;
-        height: 11px;
-      }
-
-      ::-webkit-scrollbar-track {
-        background: repeating-linear-gradient(
-          to bottom,
-          var(--paper) 0 5px,
-          var(--rule-soft) 5px 6px
-        );
-      }
-
-      ::-webkit-scrollbar-thumb {
-        background: var(--rule);
-        border: 3px solid var(--paper);
-        border-radius: 6px;
-      }
-
-      ::-webkit-scrollbar-thumb:hover {
-        background: var(--ink-3);
-      }
-
-      h1,
-      h2,
-      h3,
-      p,
-      ol,
-      figure {
-        margin: 0;
-      }
-
-      /* ============================ THE ROLL ============================
-         A continuous fanfold: tractor rails down both edges, the sheet
-         between them, and the roll running on until it is torn off.
-         ================================================================= */
-
-      .roll {
-        display: grid;
-        grid-template-columns: 26px minmax(0, 1fr) 26px;
-        min-height: 100vh;
-      }
+      /* ---- app shell ---- */
+      .app { display: flex; height: 100vh; }
 
       .rail {
-        background-color: var(--rule-soft);
-        background-image: radial-gradient(
-          circle at 50% 50%,
-          var(--void) 0 2.5px,
-          transparent 3px
-        );
-        background-size: 12px 20px;
-        background-position: center 4px;
-        background-repeat: repeat-y;
-        border-inline: 1px solid var(--rule);
-      }
-
-      .sheet {
-        min-width: 0;
-        padding: 0 clamp(16px, 4vw, 56px);
-      }
-
-      /* every printed line lives on the same strict column grid */
-      .sheet > * {
-        max-width: 1240px;
-        margin-inline: auto;
-      }
-
-      .band {
-        padding-block: clamp(20px, 3.4vw, 40px);
-        border-bottom: 1px dashed var(--rule);
-      }
-
-      .band:last-of-type {
-        border-bottom: 0;
-      }
-
-      /* running head in the margin, the way a printout carries one */
-      .running {
-        display: flex;
-        align-items: baseline;
-        gap: var(--s-3);
-        padding-bottom: 10px;
-        margin-bottom: 22px;
-        border-bottom: 1px solid var(--ink);
-      }
-
-      .running__name {
-        font-size: 12px;
-        font-weight: 600;
-        letter-spacing: 0.2em;
-        text-transform: uppercase;
-      }
-
-      .running__note {
-        font-size: 12px;
-        color: var(--ink-3);
-        letter-spacing: 0.02em;
-      }
-
-      /* ============================ MASTHEAD ============================ */
-
-      .masthead {
-        padding-top: clamp(28px, 5vw, 56px);
-        padding-bottom: var(--s-4);
-      }
-
-      .masthead h1 {
-        max-width: 22ch;
-        font-size: clamp(28px, 5.4vw, 60px);
-        font-weight: 800;
-        line-height: 1.02;
-        letter-spacing: -0.03em;
-        text-wrap: balance;
-      }
-
-      .masthead h1 em {
-        font-style: normal;
-        font-weight: 300;
-      }
-
-      .thesis {
-        max-width: 68ch;
-        margin-top: var(--s-3);
-        font-size: clamp(14px, 1.5vw, 16px);
-        line-height: 1.7;
-        color: var(--ink-2);
-      }
-
-      .thesis strong {
-        font-weight: 600;
-        color: var(--ink);
-      }
-
-      .verdict-row {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--s-3) var(--s-5);
-        margin-top: var(--s-4);
-        padding-top: var(--s-3);
-        border-top: 1px solid var(--rule);
-      }
-
-      .verdict {
-        margin: 0;
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--s-2) var(--s-5);
-        font-size: 13px;
-        font-weight: 600;
-        letter-spacing: 0.14em;
-        text-transform: uppercase;
-      }
-
-      .verdict__flow b {
-        font-size: 18px;
-        font-weight: 800;
-        letter-spacing: 0;
-        text-transform: none;
-        font-variant-numeric: tabular-nums;
-      }
-
-      .verdict__flow[data-flow="unsafe"] {
-        color: var(--carbon);
-      }
-
-      .verdict__actions {
-        display: flex;
-        align-items: center;
-        gap: var(--s-3);
-      }
-
-      .verdict__hint {
-        font-size: 12px;
-        color: var(--ink-3);
-      }
-
-      .ident {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 8px 16px;
-        margin-top: 22px;
-        padding-top: var(--s-3);
-        border-top: 1px solid var(--rule);
-        font-size: 12px;
-        color: var(--ink-3);
-      }
-
-      .ident__mark {
-        font-weight: 700;
-        letter-spacing: 0.16em;
-        text-transform: uppercase;
-        color: var(--ink);
-        display: inline-flex;
-        align-items: center;
-        gap: var(--s-2);
-      }
-
-      .mark {
-        width: 22px;
-        height: 22px;
-        flex: none;
-      }
-
-      /* printer lamp: ink present, or a dark bulb */
-      .lamp {
-        display: inline-flex;
-        align-items: center;
-        gap: 7px;
-      }
-
-      .lamp::before {
-        content: "";
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        background: var(--ink-3);
-        transition: background-color var(--t-lamp) ease, box-shadow var(--t-lamp) ease;
-      }
-
-      .lamp[data-state="up"]::before {
-        background: var(--ink);
-        box-shadow: 0 0 0 3px rgb(23 24 28 / 0.12);
-      }
-
-      .lamp[data-state="checking"]::before {
-        animation: filament 900ms ease-in-out infinite;
-      }
-
-      @keyframes filament {
-        50% {
-          opacity: 0.25;
-        }
-      }
-
-      /* ============================= RECORDS =============================
-         One response is one detached sheet. Nothing mutates in place: the
-         old sheet tears off and a new one feeds down from the sprocket.
-         ================================================================= */
-
-      .pair {
-        display: grid;
-        gap: var(--s-4);
-        align-items: start;
-        grid-template-columns: minmax(0, 1fr);
-      }
-
-      /* Two readable records side by side need real width: each measured
-         statement is 72 columns wide. Below this they stack instead of
-         shrinking into something unreadable. */
-      /* One record is not a pair: it takes the whole sheet instead of standing in
-         the left column of a grid built for two. */
-      @media (min-width: 1300px) {
-        .pair {
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-        }
-
-        .pair--single {
-          grid-template-columns: minmax(0, 1fr);
-        }
-      }
-
-      .record {
-        position: relative;
-        min-width: 0;
-        padding: var(--s-4) 18px 24px;
-        background: var(--sheet);
-        border: 1px solid var(--rule);
-        box-shadow: 0 1px 0 rgb(23 24 28 / 0.05), 0 6px 14px -10px rgb(23 24 28 / 0.42);
-      }
-
-      /* a carbon copy is a violet duplicate of the same record */
-      .record[data-flow="unsafe"] {
-        color: var(--carbon);
-        background: var(--carbon-wash);
-        border-color: #bfb5d4;
-      }
-
-      .record[data-outcome="rejected"] {
-        color: var(--alarm);
-        background: #f6e6e1;
-        border-color: #dcb4a9;
-      }
-
-      .record:is([data-outcome="offline"], [data-outcome="timeout"], [data-outcome="refused"]) .stamp {
-        color: var(--ink-3);
-        border-color: var(--ink-3);
-        border-style: dashed;
-      }
-
-      /* The tear. A sheet off the printer has a clean edge; a carbon copy
-         has been pulled away from its original, so its edge is notched.
-         This is the material difference between the two flows, and it is
-         geometry rather than a coloured rule bolted onto a card. */
-      .record::before {
-        content: "";
-        position: absolute;
-        inset: -1px -1px auto;
-        height: 6px;
-        background: var(--sheet);
-      }
-
-      .record[data-flow="unsafe"]::before,
-      .record[data-outcome="rejected"]::before {
-        background: var(--carbon-wash);
-        mask-image: linear-gradient(45deg, transparent 50%, #000 50%),
-          linear-gradient(-45deg, transparent 50%, #000 50%);
-        mask-size: 9px 6px;
-        mask-composite: intersect;
-        -webkit-mask-image: linear-gradient(45deg, transparent 50%, #000 50%),
-          linear-gradient(-45deg, transparent 50%, #000 50%);
-        -webkit-mask-size: 9px 6px;
-        -webkit-mask-composite: source-in;
-      }
-
-      .record[data-outcome="rejected"]::before {
-        background: #f6e6e1;
-      }
-
-      /* rubber stamp, one per sheet, never a badge */
-      .stamp {
-        position: absolute;
-        top: 14px;
-        right: 18px;
-        font-size: 11px;
-        font-weight: 800;
-        letter-spacing: 0.18em;
-        text-transform: uppercase;
-        transform: rotate(-3.5deg);
-        padding: 3px 8px;
-        border: 2px solid currentColor;
-        opacity: 0.62;
-      }
-
-      .record__head {
-        display: flex;
-        align-items: baseline;
-        gap: 12px;
-        padding-right: 96px;
-      }
-
-      .record__label {
-        font-size: 18px;
-        font-weight: 700;
-        line-height: 1.25;
-        letter-spacing: 0.02em;
-        text-transform: uppercase;
-      }
-
-      .record__chip {
-        font-size: 11px;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
-        color: var(--ink-3);
-      }
-
-      .record[data-flow="unsafe"] .record__chip {
-        color: var(--carbon-2);
-      }
-
-      /* ---- a printed field: a name in the margin, its value in the field */
-      .field {
-        display: grid;
-        grid-template-columns: 74px minmax(0, 1fr);
-        gap: var(--s-3);
-        padding-top: 12px;
-        margin-top: 12px;
-        border-top: 1px solid currentColor;
-        border-top-color: color-mix(in srgb, currentColor 22%, transparent);
-      }
-
-      /* the measured statement claims the whole sheet width: 72 columns is
-         a lot of horizontal space and a hanging indent would eat it */
-      .field--measured {
-        grid-template-columns: minmax(0, 1fr);
-        gap: 7px;
-      }
-
-      .field__name {
-        font-size: 11px;
-        font-weight: 600;
-        letter-spacing: 0.14em;
-        text-transform: uppercase;
-        opacity: 0.82;
-        padding-top: 3px;
-      }
-
-      .field__body {
-        min-width: 0;
-      }
-
-      .print {
-        margin: 0;
-        font: inherit;
-        font-size: 12.5px;
-        line-height: 1.65;
-        white-space: pre-wrap;
-        overflow-wrap: anywhere;
-      }
-
-      /* ---- the measurement ----
-         One column width, derived once from this element's own font size,
-         so the ruler's ticks, the field-limit rule and the printed
-         characters are guaranteed to be the same width. Deriving it from
-         `ch` anywhere else would silently resolve against a different
-         font size and put the ruler somewhere the text is not.
-         ------------------------------------------------------------- */
-      .measured {
-        position: relative;
-        --col: 0.65em;
-        --cols: 72;
-        font-size: 11px;
-        overflow: hidden;
-      }
-
-      .measured .print {
-        font-size: 11px;
-      }
-
-      .ruler {
-        display: flex;
-        font-size: 11px;
-        margin-bottom: var(--s-1);
-        color: var(--guide);
-        font-variant-numeric: tabular-nums;
-        user-select: none;
-      }
-
-      .ruler span {
-        flex: 0 0 calc(10 * var(--col));
-      }
-
-      /* the last tick before the limit, called out */
-      .ruler span:last-child {
-        color: var(--carbon-2);
-      }
-
-      /* the field limit, at column 72, drawn where the printer stops */
-      .limit {
-        position: absolute;
-        top: 15px;
-        bottom: 0;
-        left: calc(var(--cols) * var(--col));
-        width: 1px;
-        color: var(--carbon-2);
-        background: currentColor;
-        opacity: 0.7;
-      }
-
-      .limit::after {
-        content: "72";
-        position: absolute;
-        bottom: 0;
-        left: 4px;
-        font-size: 11px;
-        color: currentColor;
-        letter-spacing: 0.04em;
-      }
-
-      /* characters the printer could not keep inside the field */
-      .ov {
-        color: var(--carbon);
-        background: color-mix(in srgb, var(--carbon) 16%, transparent);
-        box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--carbon) 70%, transparent);
-      }
-
-      .record[data-flow="unsafe"] .ov {
-        color: var(--alarm);
-        background: color-mix(in srgb, var(--alarm) 22%, transparent);
-        box-shadow: inset 0 -2px 0 var(--alarm);
-      }
-
-      /* the input itself, wherever it landed in the statement. Declared
-         before `.ov` so that characters which are both input AND escapee
-         read as the more urgent fact. */
-      .typed {
-        background: color-mix(in srgb, var(--carbon) 18%, transparent);
-        box-shadow: 0 1px 0 color-mix(in srgb, var(--carbon) 45%, transparent);
-      }
-
-      .record[data-flow="unsafe"] .typed {
-        background: color-mix(in srgb, var(--alarm) 16%, transparent);
-        box-shadow: 0 1px 0 color-mix(in srgb, var(--alarm) 42%, transparent);
-      }
-
-      /* Text after the first `;`. sqlite3 compiles one statement and drops
-         the rest, so this was never executed — printing it in the same ink as
-         live SQL would credit the reader with an attack that never ran. It is
-         struck through and dimmed: present, legible, plainly not what ran. */
-      .dropped {
-        opacity: 0.5;
-        text-decoration: line-through;
-        text-decoration-thickness: 1px;
-      }
-
-      .record[data-flow="unsafe"] .dropped {
-        color: var(--ink-3);
-      }
-
-      .print:empty::before {
-        content: "no request sent yet";
-        opacity: 0.6;
-      }
-
-      .print--response {
-        padding: 10px 12px;
-        background: color-mix(in srgb, currentColor 5%, transparent);
-        border: 1px solid color-mix(in srgb, currentColor 16%, transparent);
-        max-height: 260px;
-        overflow: auto;
-        font-size: 12.5px;
-      }
-
-      .tally {
-        display: flex;
-        align-items: baseline;
-        gap: 8px;
-        margin-top: var(--s-3);
-        font-size: 12.5px;
-      }
-
-      .tally b {
-        font-size: 19px;
-        font-weight: 700;
-        letter-spacing: -0.02em;
-      }
-
-      .note:empty {
-        display: none;
-      }
-
-      .note {
-        margin-top: var(--s-2);
-        font-size: 12px;
-        line-height: 1.7;
-        color: color-mix(in srgb, currentColor 88%, transparent);
-      }
-
-      .why {
-        margin-top: 16px;
-        padding-top: 13px;
-        border-top: 1px dashed color-mix(in srgb, currentColor 30%, transparent);
-        font-size: 12.5px;
-        line-height: 1.72;
-        color: color-mix(in srgb, currentColor 82%, transparent);
-      }
-
-      .why em {
-        font-style: normal;
-        font-weight: 600;
-        color: currentColor;
-      }
-
-      /* ============================ CONSOLE ============================= */
-
-      .slip {
-        padding: var(--s-4) 22px;
-        background: var(--sheet);
-        border: 1px solid var(--rule);
-        box-shadow: 0 1px 0 rgb(23 24 28 / 0.05), 0 6px 14px -10px rgb(23 24 28 / 0.42);
-      }
-
-      .fields {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-        gap: 18px;
-      }
-
-      label.field-label {
+        width: 288px;
+        flex-shrink: 0;
         display: flex;
         flex-direction: column;
-        gap: 7px;
-        min-width: 0;
+        gap: 28px;
+        padding: 40px 20px 0;
+        border-right: 1px solid var(--rule);
+        overflow-y: auto;
       }
-
-      .field-label > span {
-        font-size: 11px;
-        font-weight: 600;
-        letter-spacing: 0.14em;
-        text-transform: uppercase;
-        color: var(--ink-3);
-      }
-
-      input,
-      select,
-      button {
-        font: inherit;
-        font-size: 13px;
-      }
-
-      input,
-      select {
-        width: 100%;
-        padding: 10px 12px;
-        color: var(--ink);
-        background: #fffdf8;
-        border: 1px solid var(--rule);
-        border-bottom: 2px solid var(--ink-3);
-        border-radius: 0;
-        caret-color: var(--carbon);
-      }
-
-      select {
-        /* native arrow is not an icon system, but the platform one is honest */
-        appearance: none;
-        background-image: linear-gradient(45deg, transparent 50%, var(--ink-2) 50%),
-          linear-gradient(135deg, var(--ink-2) 50%, transparent 50%);
-        background-position: right 14px center, right 9px center;
-        background-size: 5px 5px, 5px 5px;
-        background-repeat: no-repeat;
-        padding-right: 30px;
-      }
-
-      input::placeholder {
-        color: var(--ink-3);
-      }
-
-      :is(input, select, textarea, button):focus-visible {
-        outline: 2px solid var(--carbon);
-        outline-offset: 2px;
-      }
-
-      .actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 10px;
-        margin-top: var(--s-4);
-        padding-top: 18px;
-        border-top: 1px dashed var(--rule);
-      }
-
-      button {
-        padding: 11px 18px;
-        color: var(--ink);
-        background: var(--sheet);
-        border: 1px solid var(--ink);
-        border-radius: 0;
-        font-weight: 600;
-        letter-spacing: 0.01em;
-        cursor: pointer;
-        transition: background-color var(--t-fast) ease, color var(--t-fast) ease,
-          transform var(--t-fast) ease;
-      }
-
-      button:hover:not(:disabled) {
-        background: var(--ink);
-        color: var(--sheet);
-      }
-
-      button:active:not(:disabled) {
-        transform: translateY(1px);
-      }
-
-      button[data-role="primary"] {
-        background: var(--ink);
-        color: var(--sheet);
-      }
-
-      button[data-role="primary"]:hover:not(:disabled) {
-        background: var(--carbon);
-        border-color: var(--carbon);
-        color: #fff;
-      }
-
-      button[data-role="unsafe"] {
-        border-color: var(--carbon);
-        color: var(--carbon);
-      }
-
-      button[data-role="unsafe"]:hover:not(:disabled) {
-        background: var(--carbon);
-        color: #fff;
-      }
-
-      button:disabled {
-        opacity: 0.42;
-        cursor: default;
-      }
-
-      /* ============================ PRESET ROLL =============================
-         A batch is the same fanfold running faster: one form feed per preset,
-         its two sheets stacked down the roll in the order they printed. The
-         dashed rule between two of them means two sheets, exactly as it means
-         two sheets everywhere else on this page. Never a grid of ten cards —
-         a printer does not lay its output in a card wall.
-         ==================================================================== */
-
-      .feed {
-        display: grid;
-        gap: var(--s-5);
-        margin-top: 22px;
-      }
-
-      .feed__sheet + .feed__sheet {
-        padding-top: var(--s-5);
-        border-top: 1px dashed var(--rule);
-      }
-
-      .slip__lede {
-        max-width: 68ch;
-        font-size: 13px;
-        line-height: 1.7;
+      .rail__brand { font-size: 19px; font-weight: 700; padding: 0 12px; }
+      .rail__group { display: flex; flex-direction: column; gap: 2px; }
+      .rail__head { font-size: 13px; font-weight: 700; color: var(--ink-3); padding: 0 12px 6px; }
+      .rail__link {
+        font-size: 16px;
         color: var(--ink-2);
-      }
-
-      /* ten sheets would mean ten live regions. The roll announces one line
-         per form feed instead, in the same marginalia voice as its heads. */
-      .sr-only {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        padding: 0;
-        margin: -1px;
-        overflow: hidden;
-        clip-path: inset(50%);
+        text-decoration: none;
+        padding: 11px 12px;
+        border-left: 4px solid transparent;
         white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
-
-      /* An unrun sheet says so once, on the statement, not three times down
-         the column. The record's own empty-print placeholder is the world's
-         voice and it reads correctly in exactly one field. */
-      #scriptCall:empty::before,
-      #scriptResponse:empty::before {
-        content: none;
-      }
-
-      .notice code {
-        color: var(--ink-2);
-      }
-
-      .feed__idle {
-        margin-top: 22px;
-        font-size: 12.5px;
-        line-height: 1.7;
-        color: var(--ink-3);
-      }
-
-      /* the reviewer's own statement, ruled like every other field here */
-      textarea {
-        width: 100%;
-        min-height: 108px;
-        padding: 10px 12px;
+      .rail__link:hover { text-decoration: underline; }
+      .rail__link[aria-current="page"] {
+        background: var(--sheet);
+        border-left-color: var(--carbon);
         color: var(--ink);
-        background: #fffdf8;
-        border: 1px solid var(--rule);
-        border-bottom: 2px solid var(--ink-3);
-        border-radius: 0;
-        caret-color: var(--carbon);
-        font: inherit;
-        font-size: 13px;
-        line-height: 1.6;
-        resize: vertical;
-        tab-size: 2;
+        font-weight: 700;
       }
-
-      textarea::placeholder {
-        color: var(--ink-3);
-      }
-
-      :is(input, select, textarea, button):focus-visible {
-        outline: 2px solid var(--carbon);
-        outline-offset: 2px;
-      }
-
-      /* A note in ink, never in the alarm hue: the alarm is reserved for a
-         statement the engine refused, and this line is not one. */
-      .notice {
-        margin-top: var(--s-3);
-        padding-top: 12px;
-        border-top: 1px dashed var(--rule);
-        font-size: 12px;
-        line-height: 1.7;
-        color: var(--ink-2);
-      }
-
-      /* ============================ CHECKLIST =========================== */
-
-      .skeleton {
-        list-style: none;
-        padding: 0;
-        margin: 0;
+      .rail__foot {
+        margin-top: auto;
+        padding: 16px 12px 20px;
         border-top: 1px solid var(--rule);
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        font-size: 14px;
       }
-
-      .skeleton li {
-        display: grid;
-        grid-template-columns: 40px 116px minmax(0, 1fr);
-        gap: 16px;
-        align-items: baseline;
-        padding: 13px 0;
-        border-bottom: 1px solid var(--rule-soft);
-      }
-
-      .skeleton li::before {
-        content: counter(step, decimal-leading-zero);
-        counter-increment: step;
-        font-size: 11px;
-        color: var(--ink-3);
-      }
-
-      .skeleton {
-        counter-reset: step;
-      }
-
-      .skeleton b {
-        font-size: 11px;
-        font-weight: 700;
-        letter-spacing: 0.13em;
-        text-transform: uppercase;
-      }
-
-      .skeleton span {
-        font-size: 12.5px;
-        line-height: 1.7;
-        color: var(--ink-2);
-      }
-
-      /* ============================== COLOPHON ========================== */
-
-      .colophon {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-        gap: var(--s-5);
-        padding-block: 30px 44px;
-        margin-top: 34px;
-        border-top: 1px solid var(--ink);
-        font-size: 12px;
-        line-height: 1.8;
-        color: var(--ink-3);
-      }
-
-      .colophon h2 {
-        font-size: 11px;
-        font-weight: 700;
-        letter-spacing: 0.16em;
-        text-transform: uppercase;
-        color: var(--ink);
-        margin-bottom: 7px;
-      }
-
-      .colophon code {
-        font: inherit;
-        color: var(--ink-2);
-      }
-
-      /* ======================== THE PRINTED MOMENT ======================
-         One authored motion, in three parts. The sheet tears off and feeds
-         down from the sprocket; the carriage then prints it field by field
-         the way a printer advances down a page — each field wipes in left to
-         right, and the next field takes over as the last one lands; the
-         stamp comes down once the sheet is finished. Nothing else on the
-         page moves on its own.
-
-         `--d` is the field's place in that advance. It is written by the
-         script that fills the record, because the field count is the
-         response's to decide, not the stylesheet's.
-         ================================================================= */
-
-      @keyframes feed {
-        from {
-          clip-path: inset(0 0 100% 0);
-          transform: translateY(-10px);
-        }
-        to {
-          clip-path: inset(0);
-          transform: none;
-        }
-      }
-
-      /* the head sweeping one line, in fixed character steps */
-      @keyframes carriage {
-        from {
-          clip-path: inset(0 100% 0 0);
-        }
-        to {
-          clip-path: inset(0 -1px 0 0);
-        }
-      }
-
-      /* the field limit firing as the carriage reaches column 72. Only a
-         statement that actually overran the field gets this, and it gets a
-         beat of its own rather than a flash inside the wipe: the head has
-         to finish the line before the edge of the paper can react. */
-      @keyframes overrun {
-        0% {
-          color: var(--carbon-2);
-          opacity: 0.7;
-        }
-        30% {
-          color: var(--alarm);
-          opacity: 1;
-        }
-        100% {
-          color: var(--carbon-2);
-          opacity: 0.7;
-        }
-      }
-
-      /* a rubber stamp coming down, not bouncing: it is already flat when
-         it lands and the opacity is what sells the pressure */
-      @keyframes press {
-        from {
-          opacity: 0;
-          scale: 1.18;
-        }
-        to {
-          opacity: 0.62;
-          scale: 1;
-        }
-      }
-
-      /* fresh ink on a sheet that has just come off the machine. This is
-         also the whole reduced-motion path, so it has to read on its own. */
-      @keyframes fresh {
-        from {
-          opacity: 0.26;
-        }
-        to {
-          opacity: 0;
-        }
-      }
-
-      @keyframes fade {
-        from {
-          opacity: 0;
-        }
-        to {
-          opacity: 0.62;
-        }
-      }
-
-      .record::after {
-        content: "";
-        position: absolute;
-        inset: 0;
-        background: currentColor;
-        opacity: 0;
-        pointer-events: none;
-      }
-
-      .record[data-printing] {
-        animation: feed var(--t-feed) var(--ease-feed) both;
-      }
-
-      .record[data-printing]::after {
-        animation: fresh 340ms ease-out both;
-      }
-
-      .record[data-printing] :is(.print, .tally, .note) {
-        animation: carriage 260ms steps(14, end) var(--d, 0ms) both;
-      }
-
-      .record[data-printing] .stamp {
-        animation: press 200ms cubic-bezier(0.2, 0.9, 0.3, 1) var(--stamp-d, 0ms) both;
-      }
-
-      .record[data-printing] .measured[data-overflow] .limit {
-        animation: overrun 320ms ease-out calc(var(--d, 0ms) + 190ms) both;
-      }
-
-      .pair--after {
-        margin-top: var(--s-5);
-      }
-
-      .why--soft {
-        color: var(--ink-2);
-      }
-
-      /* Reduced motion takes away the travel and keeps the fact. No sheet
-         feeds, no head sweeps, no limit flares — but the sheet still takes
-         ink and the stamp still arrives, because "this was just printed" is
-         feedback and not decoration. The lamp's idle filament stops pulsing
-         for the same reason: a loop nobody asked for is the one to drop. */
-      @media (prefers-reduced-motion: reduce) {
-        .record[data-printing] {
-          animation: none;
-        }
-
-        .record[data-printing] :is(.print, .tally, .note),
-        .record[data-printing] .measured[data-overflow] .limit {
-          animation: none;
-        }
-
-        .record[data-printing] .stamp {
-          animation: fade 200ms linear var(--stamp-d, 0ms) both;
-        }
-
-        .lamp[data-state="checking"]::before {
-          animation: none;
-          opacity: 0.4;
-        }
-      }
-
-      /* ============================== ADAPT ============================== */
-
-      @media (max-width: 720px) {
-        .roll {
-          grid-template-columns: 16px minmax(0, 1fr) 16px;
-        }
-
-        .rail {
-          background-size: 10px 20px;
-        }
-
-        /* The ruler and the column limit are a measurement, and below the
-           width where 72 columns fit they would be a lie. The character
-           colouring still marks what escaped the field, so the mechanism
-           survives on a phone without the page faking a printout. */
-        .limit,
-        .ruler {
-          display: none;
-        }
-
-        .field {
-          grid-template-columns: minmax(0, 1fr);
-          gap: 6px;
-        }
-
-        .field__name {
-          padding-top: 0;
-        }
-
-        .record__head {
-          padding-right: 0;
-        }
-
-        .stamp {
-          position: static;
-          display: inline-block;
-          transform: none;
-          margin-top: 10px;
-        }
-
-        .skeleton li {
-          grid-template-columns: 34px minmax(0, 1fr);
-        }
-
-        .skeleton li span {
-          grid-column: 2;
-        }
-      }
-
-      @media print {
-        .rail,
-        .actions,
-        .masthead .ident {
-          display: none;
-        }
-
-        body {
-          background: #fff;
-        }
-
-        .roll {
-          grid-template-columns: minmax(0, 1fr);
-        }
-      }
-
-      :is(input, textarea)[aria-invalid="true"] {
-        border-bottom-color: var(--alarm);
-      }
-
-      .linkish {
-        justify-self: start;
+      .linkbtn {
+        align-self: flex-start;
         padding: 0;
         border: 0;
         background: none;
-        color: var(--ink-2);
         font: inherit;
-        font-size: 12px;
-        text-decoration: underline;
-        text-underline-offset: 3px;
-        cursor: pointer;
-      }
-
-      .script-tools {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: baseline;
-        gap: var(--s-2) var(--s-4);
-      }
-
-      .reset-note {
-        font-size: 12px;
-        color: var(--ink-2);
-      }
-
-      .linkish:hover:not(:disabled) {
-        background: none;
+        font-weight: 700;
         color: var(--carbon);
+        cursor: pointer;
+        text-decoration: underline;
+      }
+      .linkbtn:disabled { color: var(--ink-3); cursor: default; }
+      .rail__note { font-size: 12px; color: var(--ink-3); }
+
+      #screen { flex: 1 1 0; min-width: 0; overflow-y: auto; background: var(--sheet); }
+      [data-screen] { padding: 56px 48px 40px; }
+      [data-screen] > h1 { font-size: 46px; line-height: 1.12; font-weight: 800; }
+      [data-screen] > h1:focus { outline: none; }
+
+      .banner {
+        background: var(--sheet);
+        border: 2px solid var(--alarm);
+        padding: 14px 18px;
+        margin: 20px 48px 0;
+        font-size: 16px;
+        display: flex;
+        align-items: center;
+        gap: 18px;
       }
 
-      kbd {
-        font: inherit;
-        padding: 0 var(--s-1);
-        border: 1px solid var(--rule);
-        background: var(--sheet);
+      /* ---- lessons: explain column + demo column ---- */
+      [data-screen].lesson { padding: 0; display: grid; grid-template-columns: 440px 1fr; height: 100vh; }
+      [data-screen].lesson[hidden] { display: none; }
+      .explain { padding: 56px 44px 40px; display: flex; flex-direction: column; gap: 24px; min-height: 0; overflow-y: auto; }
+      .explain h1 { font-size: 46px; line-height: 1.12; font-weight: 800; }
+      .explain h1:focus { outline: none; }
+      .explain p { font-size: 20px; line-height: 1.55; }
+      .explain__nav { margin-top: auto; display: flex; gap: 16px; align-items: center; }
+      .explain__nav a { font-size: 18px; text-decoration: none; color: var(--ink); padding: 14px 0; }
+      .explain__nav a.next { font-weight: 700; background: var(--carbon); color: var(--sheet); padding: 14px 28px; }
+      .demo { background: var(--sheet); border-left: 1px solid var(--rule); padding: 56px 48px 40px; display: flex; flex-direction: column; gap: 22px; min-width: 0; overflow-y: auto; }
+      .demo .out { display: flex; flex-direction: column; gap: 22px; }
+      .wait { font-size: 16px; color: var(--ink-3); }
+      .err { font-size: 16px; color: var(--alarm); }
+      .dh { font-size: 15px; color: var(--ink-2); }
+      .note { font-size: 14px; color: var(--ink-3); }
+      .qline { font-size: 17px; line-height: 1.7; background: #fff; border: 1px solid var(--rule-soft); padding: 16px 18px; overflow-wrap: anywhere; }
+      .qline .u { background: #f2d8d2; color: var(--alarm); }
+      .qline .s { background: var(--carbon-wash); color: var(--carbon); font-weight: 700; padding: 0 6px; }
+      .big { font-size: 44px; font-weight: 800; line-height: 1.1; }
+      .big.leak, .cnt.leak { color: var(--alarm); }
+      .big.held, .cnt.held { color: var(--carbon); }
+      .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+      .grid4 div { background: #fff; font-size: 18px; border: 1px solid var(--rule-soft); padding: 12px; overflow-wrap: anywhere; }
+      .vals { display: flex; gap: 12px; align-items: center; font-size: 16px; flex-wrap: wrap; }
+      .vals span:first-child { color: var(--ink-2); }
+      .vals .chip { border: 1px dashed var(--carbon); padding: 6px 12px; overflow-wrap: anywhere; }
+      .utable { border-collapse: collapse; font-size: 18px; width: 100%; }
+      .utable th { text-align: left; font-size: 14px; color: var(--ink-3); font-weight: 700; padding: 6px 12px; border-bottom: 1px solid var(--rule-soft); }
+      .utable td { padding: 8px 12px; border-bottom: 1px solid var(--rule-soft); }
+      .utable tr.hi td { background: var(--carbon-wash); }
+      .row2 { display: flex; gap: 14px; align-items: end; flex-wrap: wrap; }
+      .row2 label { display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: var(--ink-2); }
+      .row2 input { font: inherit; font-size: 18px; padding: 10px 12px; border: 1px solid var(--rule); background: #fff; color: var(--ink); width: 240px; }
+      .row2 input.bad { color: var(--alarm); }
+      .btn { font: inherit; font-size: 18px; font-weight: 700; height: 56px; padding: 0 24px; border: 0; background: var(--ink); color: var(--sheet); cursor: pointer; }
+      .btn:disabled { opacity: 0.6; cursor: default; }
+      .card { display: flex; flex-direction: column; gap: 14px; padding: 22px; background: #fff; border: 1px solid var(--rule-soft); }
+      .card.safe { border: 2px solid var(--carbon); }
+      .card__head { display: flex; justify-content: space-between; align-items: baseline; }
+      .card__head b { font-size: 16px; }
+      .card.unsafe .card__head b { color: var(--alarm); }
+      .card.safe .card__head b { color: var(--carbon); }
+      .cnt { font-size: 30px; font-weight: 800; }
+      .card .qline { padding: 0; border: 0; }
+      .tape { position: relative; font-size: 20px; line-height: 1.4; white-space: pre; padding: 6px 0 0; }
+      .tape .cmt { color: var(--ink-3); text-decoration: line-through; }
+      .tape .mk { border-bottom: 2px solid var(--alarm); }
+      .tapebox { position: relative; }
+      .ann { position: absolute; font-size: 15px; color: var(--alarm); white-space: nowrap; border-left: 1px solid var(--alarm); padding-left: 6px; }
+      .recap { font-size: 20px; line-height: 1.55; padding-left: 28px; display: flex; flex-direction: column; gap: 14px; margin: 0; }
+      .recap li b { display: block; }
+
+      /* ---- landing ---- */
+      .app[data-home] .rail { display: none; }
+      [data-screen].home { padding: 56px 72px; max-width: 1272px; margin: 0 auto; }
+      .home__top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 72px; }
+      .home__mark { font-size: 20px; font-weight: 700; }
+      .home__nav { display: flex; gap: 32px; font-size: 16px; }
+      .home__nav a { color: var(--ink); }
+      [data-screen].home > h1 { font-size: 64px; line-height: 1.08; font-weight: 800; max-width: 900px; }
+      .home__lede { font-size: 22px; line-height: 1.5; color: var(--ink-2); max-width: 760px; margin-top: 24px; }
+      .home__acts { display: flex; gap: 16px; margin-top: 36px; }
+      .home__acts a { font-size: 18px; font-weight: 700; padding: 16px 30px; text-decoration: none; border: 2px solid var(--ink); color: var(--ink); }
+      .home__acts a.primary { background: var(--carbon); border-color: var(--carbon); color: var(--sheet); }
+      .home__prev { margin-top: 56px; }
+      .home__prev > p { font-size: 16px; color: var(--ink-2); }
+      .home__pair { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 16px; }
+      .home__panel { background: var(--sheet); border: 1px solid var(--rule); padding: 28px; display: flex; flex-direction: column; gap: 10px; }
+      .home__panel.safe { border: 2px solid var(--carbon); }
+      .home__panel > b { font-size: 16px; color: var(--alarm); }
+      .home__panel.safe > b { color: var(--carbon); }
+      .home__n { font-size: 56px; font-weight: 800; line-height: 1.1; color: var(--alarm); }
+      .home__panel.safe .home__n { color: var(--carbon); }
+      .home__foot { margin-top: 40px; font-size: 14px; color: var(--ink-3); }
+
+      /* ---- lab ---- */
+      [data-screen].lab { padding: 36px 40px; display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 24px; align-items: start; }
+      .lab__tool { grid-column: 1 / 3; display: flex; flex-direction: column; gap: 16px; background: var(--sheet); border: 1px solid var(--rule); padding: 22px 24px; }
+      .lab__top { display: flex; justify-content: space-between; align-items: baseline; gap: 20px; }
+      [data-screen].lab h1 { font-size: 28px; line-height: 1.2; font-weight: 800; }
+      .lab__desc { font-size: 14px; color: var(--ink-2); }
+      .lab__in { display: flex; gap: 12px; align-items: end; }
+      .lab__in label { display: flex; flex-direction: column; gap: 6px; font-size: 14px; flex: 1 1 0; min-width: 0; }
+      .lab__in label.sel { flex: 0 0 auto; }
+      .lab__in input, .lab__in select, .lab__sql { font: inherit; font-size: 20px; padding: 10px 12px; border: 2px solid var(--ink); background: #fff; color: var(--ink); min-width: 0; }
+      .lab__in select { font-size: 16px; padding: 12px 10px; min-width: 260px; }
+      .lab__in input.bad { color: var(--alarm); }
+      .lab__sql { font-size: 16px; width: 100%; resize: vertical; line-height: 1.5; }
+      .lab__run { font: inherit; font-size: 17px; font-weight: 700; height: 48px; padding: 0 22px; background: var(--carbon); color: var(--sheet); border: 0; cursor: pointer; }
+      .lab__run:disabled { opacity: 0.6; cursor: default; }
+      .lab__warn { font-size: 14px; color: var(--ink-2); }
+      .lab__res { min-width: 0; }
+      .lab__pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+      .lab__pair .card { gap: 12px; padding: 20px; }
+      .lrows { display: flex; flex-direction: column; font-size: 16px; }
+      .lrows div { display: grid; grid-template-columns: 40px 1fr; padding: 8px 0; border-bottom: 1px solid var(--rule-soft); }
+      .lrows div:last-child { border-bottom: 0; }
+      .lrows span:first-child { color: var(--ink-3); }
+      .verdict { margin-top: auto; font-size: 15px; }
+      .card.unsafe .verdict.bad { color: var(--alarm); }
+      .card.safe .verdict { color: var(--carbon); }
+      .lab__table { overflow-x: auto; }
+      .lab__table .utable { font-size: 15px; }
+      .log { background: var(--sheet); border: 1px solid var(--rule); padding: 18px; display: flex; flex-direction: column; gap: 10px; max-height: calc(100vh - 72px); position: sticky; top: 0; }
+      .log__head { display: flex; justify-content: space-between; align-items: baseline; }
+      .log__head b { font-size: 15px; }
+      .log__list { display: flex; flex-direction: column; gap: 8px; font-size: 13px; line-height: 1.5; overflow-y: auto; min-height: 0; }
+      .log__e { background: #fff; padding: 10px 12px; border-left: 3px solid var(--void); overflow-wrap: anywhere; }
+      .log__e.bound { border-left-color: var(--carbon); }
+      .log__e.bound b { color: var(--carbon); }
+      .log__e.pasted { border-left-color: var(--alarm); }
+      .log__e.pasted b { color: var(--alarm); }
+      .log__empty, .log__off { font-size: 13px; color: var(--ink-3); }
+      .log__off { color: var(--alarm); }
+
+      /* ---- motion: one small system. Content is final without it. ---- */
+      @keyframes scr { from { opacity: 0; transform: translate(var(--ex, 0), var(--ey, 0)); } to { opacity: 1; transform: none; } }
+      .enter { --ey: 12px; animation: scr var(--t-feed) var(--ease-feed); }
+      .enter[data-dir="next"] { --ex: 24px; --ey: 0; }
+      .enter[data-dir="prev"] { --ex: -24px; --ey: 0; }
+
+      @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+      .grid4 div, .lrows div, .lab__table tbody tr { animation: rise var(--t-fast) both; animation-delay: calc(var(--i, 0) * 40ms); }
+
+      @keyframes sweep { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+      .big, .cnt, .home__n { position: relative; width: fit-content; }
+      .leak::after { content: ""; position: absolute; left: 0; right: 0; bottom: -2px; height: 3px; background: var(--alarm); transform-origin: left; animation: sweep var(--t-ink) var(--ease-feed) both; }
+      /* count-up: real text stays in the DOM (hidden visually); the pseudo shows the running number */
+      .cu > .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+      .cu::before { content: attr(data-v); content: attr(data-v) / ""; }
+
+      @keyframes pulse { 0%, 100% { outline: 0 solid var(--carbon); outline-offset: 0; } 50% { outline: 2px solid var(--carbon); outline-offset: 4px; } }
+      .card.safe, .home__panel.pulse { animation: pulse var(--t-stamp) 2; }
+
+      @keyframes ink { from { background-size: 0% 100%; } to { background-size: 100% 100%; } }
+      .qline .u { background: linear-gradient(#f2d8d2, #f2d8d2) no-repeat left / 100% 100%; animation: ink var(--t-ink) var(--ease-feed); }
+      .qline .s { background: linear-gradient(var(--carbon-wash), var(--carbon-wash)) no-repeat left / 100% 100%; animation: ink var(--t-ink) var(--ease-feed); }
+
+      .btn, .lab__run, .explain__nav a.next, .home__acts a, .linkbtn { transition: background-color var(--t-fast), color var(--t-fast), border-color var(--t-fast); }
+      .btn, .lab__run { position: relative; overflow: hidden; }
+      .btn:hover:not(:disabled) { background: var(--ink-2); }
+      .lab__run:hover:not(:disabled), .explain__nav a.next:hover, .home__acts a.primary:hover { background: var(--carbon-2); border-color: var(--carbon-2); }
+      .home__acts a:not(.primary):hover { background: var(--carbon-wash); }
+      .linkbtn:hover:not(:disabled) { color: var(--ink); }
+      .btn:active:not(:disabled), .lab__run:active:not(:disabled), .linkbtn:active:not(:disabled), .explain__nav a.next:active, .home__acts a:active { transform: translateY(1px); }
+      @keyframes bar { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+      [aria-busy="true"]::after { content: ""; position: absolute; left: 0; bottom: 0; width: 40%; height: 2px; background: var(--carbon); animation: bar var(--t-filament) linear infinite; }
+      .lab__run[aria-busy="true"]::after { background: var(--carbon-wash); }
+      .row2 input, .lab__in input, .lab__in select, .lab__sql { transition: border-color var(--t-fast); }
+      .row2 input:focus, .lab__in input:focus, .lab__in select:focus, .lab__sql:focus { border-color: var(--carbon); }
+      .rail__link { transition: border-left-color var(--t-fast); }
+
+      @keyframes drop { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+      .log__e.new { animation: drop var(--t-feed) var(--ease-feed); }
+      @keyframes slidedown { from { opacity: 0; transform: translateY(-100%); } to { opacity: 1; transform: none; } }
+      .banner:not([hidden]) { animation: slidedown var(--t-feed) var(--ease-feed); }
+      @keyframes flash { from { background: var(--carbon-wash); } to { background: transparent; } }
+      #dbUsers.flash { animation: flash var(--t-ink) both; }
+
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after { transition: none !important; animation: none !important; }
       }
     </style>
   </head>
   <body>
-    <div class="roll">
-      <div class="rail" aria-hidden="true"></div>
+    <div class="app" id="app">
+      <nav class="rail" aria-label="Sections">
+        <a class="rail__brand" href="#/" style="display:block;color:inherit;text-decoration:none"><span style="display:inline-flex;align-items:center;gap:10px"><svg width="28" height="28" viewBox="0 0 64 64" aria-hidden="true" style="flex:none"><path d="M8 6 H56 V36 L44 48 L32 58 L20 48 L8 36 Z" style="fill: var(--sheet); stroke: var(--ink)" stroke-width="6"/><text x="32" y="40" text-anchor="middle" font-family="Azeret Mono, monospace" font-weight="800" font-size="30" style="fill: var(--carbon)">?</text></svg>SQLShield</span></a>
+        <div class="rail__group">
+          <div class="rail__head">Learn</div>
+          <a class="rail__link" href="#/learn/1">1  How a login works</a>
+          <a class="rail__link" href="#/learn/2">2  The trick</a>
+          <a class="rail__link" href="#/learn/3">3  Why it worked</a>
+          <a class="rail__link" href="#/learn/4">4  The fix</a>
+          <a class="rail__link" href="#/learn/5">5  Not just logins</a>
+          <a class="rail__link" href="#/learn/6">6  What to remember</a>
+        </div>
+        <div class="rail__group">
+          <div class="rail__head">Lab</div>
+          <a class="rail__link" href="#/lab/login">Login tester</a>
+          <a class="rail__link" href="#/lab/search">Search tester</a>
+          <a class="rail__link" href="#/lab/sandbox">SQL sandbox</a>
+        </div>
+        <div class="rail__foot">
+          <div>Demo database: <b id="dbUsers">…</b></div>
+          <button class="linkbtn" type="button" id="resetBtn">Reset database</button>
+          <div id="resetNote" role="status" hidden></div>
+          <div class="rail__note">Teaching demo. Runs on a throwaway local database.</div>
+        </div>
+      </nav>
 
-      <div class="sheet">
-        <header class="band masthead">
-          <h1>One string. <em>Two ways</em> the database reads it.</h1>
-          <p class="thesis">
-            The <strong>same classic bypass payload</strong>, sent through both query constructions against one database. Bound, it stays data. Interpolated, it becomes syntax and prints every row it was never allowed to see.
-          </p>
-          <div class="verdict-row">
-            <p class="verdict" id="verdict" aria-live="polite">
-              <span class="verdict__flow" data-flow="safe">bound <span aria-hidden="true">→</span> <b id="verdictSafe">printing…</b></span>
-              <span class="verdict__flow" data-flow="unsafe">interpolated <span aria-hidden="true">→</span> <b id="verdictUnsafe">printing…</b></span>
-            </p>
-            <div class="verdict__actions">
-              <button id="rerunBtn" type="button" data-role="primary">Re-run proof</button>
-              <span class="verdict__hint">fills the request slip with the bypass</span>
+      <main id="screen">
+        <div class="banner" id="banner" role="alert" hidden>
+          <span id="bannerText"></span>
+          <button class="linkbtn" type="button" id="bannerReset" hidden>Reset database</button>
+        </div>
+        <section class="home" data-screen="home" data-title="Home" hidden>
+          <div class="home__top"><span class="home__mark" style="display:inline-flex;align-items:center;gap:10px"><svg width="32" height="32" viewBox="0 0 64 64" aria-hidden="true" style="flex:none"><path d="M8 6 H56 V36 L44 48 L32 58 L20 48 L8 36 Z" style="fill: var(--sheet); stroke: var(--ink)" stroke-width="6"/><text x="32" y="40" text-anchor="middle" font-family="Azeret Mono, monospace" font-weight="800" font-size="30" style="fill: var(--carbon)">?</text></svg>SQLShield</span><nav class="home__nav" aria-label="Start"><a href="#/learn/1">Lessons</a><a href="#/lab/login">Lab</a></nav></div>
+          <h1 tabindex="-1">How SQL injection works, and how to stop it.</h1>
+          <p class="home__lede">A hands-on demo for beginners. Type into a real login, see exactly what the database receives, and learn the one change that makes it safe.</p>
+          <div class="home__acts"><a class="primary" href="#/learn/1">Start the lessons →</a><a href="#/lab/login">Open the Lab</a></div>
+          <div class="home__prev">
+            <p>Same text in both logins: <b>' OR 1=1 --</b> with password x</p>
+            <div class="home__pair">
+              <div class="home__panel"><b>Unsafe login</b><div class="home__n" id="hmU"></div><div>The text changed the question.</div></div>
+              <div class="home__panel safe"><b>Safe login</b><div class="home__n" id="hmS"></div><div>The text stayed a value.</div></div>
             </div>
           </div>
-          <div class="ident">
-            <span class="ident__mark"><svg class="mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false"><rect x="7" y="3" width="18" height="26" fill="var(--sheet)" stroke="currentColor" stroke-width="1.5"/><path d="M19 29 L25 23 L25 29 Z" fill="var(--carbon)"/><g fill="currentColor"><circle cx="3.5" cy="9" r="1.2"/><circle cx="3.5" cy="16" r="1.2"/><circle cx="3.5" cy="23" r="1.2"/><circle cx="28.5" cy="9" r="1.2"/><circle cx="28.5" cy="16" r="1.2"/><circle cx="28.5" cy="23" r="1.2"/></g><g stroke="currentColor" stroke-width="1.5"><line x1="10.5" y1="9" x2="21.5" y2="9"/><line x1="10.5" y1="13" x2="18" y2="13"/></g></svg>SQLShield Demo</span>
-            <span class="lamp" id="lamp" data-state="checking">checking backend</span>
-            <span>node &middot; express &middot; sqlite3</span>
-          </div>
-        </header>
-
-        <section class="band" aria-labelledby="proof-h">
-          <div class="running">
-            <p class="running__name" id="proof-h">Proof</p>
-            <span class="running__note" id="proof-note"
-              >pre-run on load &middot; payload <code>' OR '1'='1 --</code></span
-            >
-          </div>
-          <div class="pair">
-            <article class="record" id="safeRecord" data-flow="safe">
-              <span class="stamp" id="safeStamp">safe</span>
-              <div class="record__head">
-                <h2 class="record__label">Safe flow</h2>
-                <span class="record__chip">prepared</span>
-              </div>
-              <div class="field field--measured">
-                <span class="field__name">query</span>
-                <div class="field__body measured">
-                  <div class="ruler" id="safeRuler" aria-hidden="true"></div>
-                  <span class="limit" aria-hidden="true"></span>
-                  <pre class="print" id="safeQuery"></pre>
-                </div>
-              </div>
-              <div class="field">
-                <span class="field__name">bound</span>
-                <div class="field__body">
-                  <pre class="print" id="safeBinding"></pre>
-                </div>
-              </div>
-              <div class="field">
-                <span class="field__name">call</span>
-                <div class="field__body">
-                  <pre class="print" id="safeCall"></pre>
-                </div>
-              </div>
-              <div class="field">
-                <span class="field__name">response</span>
-                <div class="field__body">
-                  <pre class="print print--response" id="safeResponse" aria-live="polite"></pre>
-                </div>
-              </div>
-              <p class="tally" id="safeTally"></p>
-              <p class="note" id="safeNote" aria-live="polite"></p>
-              <p class="why">
-                The payload went in as a <em>bound value</em>. SQLite parsed the
-                statement before the driver ever saw a single byte of it, so the only
-                question left to ask was whether it matched. It did not.
-              </p>
-            </article>
-
-            <article class="record" id="unsafeRecord" data-flow="unsafe">
-              <span class="stamp" id="unsafeStamp">injected</span>
-              <div class="record__head">
-                <h2 class="record__label">Unsafe flow</h2>
-                <span class="record__chip">interpolated</span>
-              </div>
-              <div class="field field--measured">
-                <span class="field__name">query</span>
-                <div class="field__body measured">
-                  <div class="ruler" id="unsafeRuler" aria-hidden="true"></div>
-                  <span class="limit" aria-hidden="true"></span>
-                  <pre class="print" id="unsafeQuery"></pre>
-                </div>
-              </div>
-              <div class="field">
-                <span class="field__name">bound</span>
-                <div class="field__body">
-                  <pre class="print">none &mdash; input is part of the SQL text</pre>
-                </div>
-              </div>
-              <div class="field">
-                <span class="field__name">call</span>
-                <div class="field__body">
-                  <pre class="print" id="unsafeCall"></pre>
-                </div>
-              </div>
-              <div class="field">
-                <span class="field__name">response</span>
-                <div class="field__body">
-                  <pre class="print print--response" id="unsafeResponse" aria-live="polite"></pre>
-                </div>
-              </div>
-              <p class="tally" id="unsafeTally"></p>
-              <p class="note" id="unsafeNote" aria-live="polite"></p>
-              <p class="why">
-                The same characters were pasted into the string <em>before</em> anything
-                was parsed, so the input <em>is</em> the query. It closed the password
-                clause, made its own condition true, and commented out the rest. There
-                is no value channel to escape into, because there is no value channel.
-              </p>
-            </article>
-          </div>
+          <div class="home__foot">6 short lessons · 3 tools · runs on a throwaway local database</div>
         </section>
-
-        <section class="band" aria-labelledby="console-h">
-          <div class="running">
-            <p class="running__name" id="console-h">Request slip</p>
-            <span class="running__note">fill it in, tear it off, send it</span>
-          </div>
-          <div class="slip">
-            <div class="fields">
-              <label class="field-label">
-                <span>Username</span>
-                <input
-                  id="username"
-                  type="text"
-                  value="alice"
-                  autocomplete="off"
-                  spellcheck="false"
-                />
-              </label>
-              <label class="field-label">
-                <span>Password</span>
-                <input
-                  id="password"
-                  type="text"
-                  value="pw123"
-                  autocomplete="off"
-                  spellcheck="false"
-                />
-              </label>
-              <label class="field-label">
-                <span>Payload preset</span>
-                <select id="preset">
-                  <option value="alice">Normal login</option>
-                  <option value="' OR '1'='1 --">Classic bypass</option>
-                  <option value="admin' --">Admin bypass</option>
-                  <option value="' UNION SELECT id, username FROM users --">
-                    Union payload
-                  </option>
-                  <option value="' OR 1">Broken statement</option>
-                </select>
-              </label>
-            </div>
-            <div class="actions">
-              <button id="safeBtn" type="button" data-role="primary">
-                Test safe login
-              </button>
-              <button id="unsafeBtn" type="button" data-role="unsafe">
-                Test vulnerable login
-              </button>
+        <section class="lesson" data-screen="learn/1" data-title="How a login works" hidden></section>
+        <section class="lesson" data-screen="learn/2" data-title="The trick" hidden></section>
+        <section class="lesson" data-screen="learn/3" data-title="Why it worked" hidden></section>
+        <section class="lesson" data-screen="learn/4" data-title="The fix" hidden></section>
+        <section class="lesson" data-screen="learn/5" data-title="Not just logins" hidden></section>
+        <section class="lesson" data-screen="learn/6" data-title="What to remember" hidden></section>
+        <section class="lab" data-screen="lab/login" data-title="Login tester" hidden>
+          <div class="lab__tool">
+            <div class="lab__top"><h1 tabindex="-1">Login tester</h1><span class="lab__desc">Runs your text through both logins at once</span></div>
+            <div class="lab__in">
+              <label>Name<input id="lgU" autocomplete="off" spellcheck="false" /></label>
+              <label>Password<input id="lgP" autocomplete="off" spellcheck="false" /></label>
+              <label class="sel">Example<select id="lgX">
+                <option value="alice">Normal login</option>
+                <option value="' OR 1=1 --">Log in as everyone</option>
+                <option value="admin' --">Log in as admin</option>
+                <option value="' UNION SELECT id, username FROM users --">Read other columns</option>
+                <option value="' OR 1">Broken text</option>
+                <option value="" disabled hidden>Your own text</option>
+              </select></label>
+              <button class="lab__run" id="lgB" type="button">Run both</button>
             </div>
           </div>
+          <div class="lab__res" id="lgOut"></div>
+          <div class="lab__logslot"></div>
         </section>
-
-        <section class="band" aria-labelledby="roll-h">
-          <div class="running">
-            <p class="running__name" id="roll-h">Preset roll</p>
-            <span class="running__note"
-              >every payload &middot; both paths &middot; one form feed each</span
-            >
-          </div>
-          <div class="slip">
-            <p class="slip__lede">
-              A menu of five payloads is still a menu &mdash; it is a list of
-              attacks the author picked. Print the whole roll and every one of
-              them runs at both paths in turn, so the spread is evidence rather
-              than a claim. The request slip is armed to each payload as its
-              sheets print, so the fields above always hold exactly what is on
-              the sheet below them.
-            </p>
-            <div class="actions">
-              <button id="rollBtn" type="button" data-role="primary">
-                Print all presets
-              </button>
+        <section class="lab" data-screen="lab/search" data-title="Search tester" hidden>
+          <div class="lab__tool">
+            <div class="lab__top"><h1 tabindex="-1">Search tester</h1><span class="lab__desc">Runs your search through both searches</span></div>
+            <div class="lab__in">
+              <label>Search for<input id="seT" autocomplete="off" spellcheck="false" /></label>
+              <button class="lab__run" id="seB" type="button">Search both</button>
             </div>
-            <p class="sr-only" id="rollStatus" role="status"></p>
           </div>
-          <div class="feed" id="rollFeed">
-            <p class="feed__idle">
-              Nothing on the roll yet. Print all presets to run every payload
-              through both paths &mdash; five form feeds, ten sheets.
-            </p>
-          </div>
+          <div class="lab__res" id="seOut"></div>
+          <div class="lab__logslot"></div>
         </section>
-
-        <section class="band" aria-labelledby="search-h">
-          <div class="running">
-            <p class="running__name" id="search-h">Search record</p>
-            <span class="running__note">GET /api/search-demo?term=</span>
+        <section class="lab" data-screen="lab/sandbox" data-title="SQL sandbox" hidden>
+          <div class="lab__tool">
+            <div class="lab__top"><h1 tabindex="-1">SQL sandbox</h1><span class="lab__desc">Runs exactly what you type against the demo database</span></div>
+            <label style="display:flex;flex-direction:column;gap:6px;font-size:14px">Statement<textarea class="lab__sql" id="sqS" rows="8" spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off">SELECT id, username FROM users
+WHERE username = '' OR '1'='1';</textarea></label>
+            <div class="lab__in" style="align-items:center"><button class="lab__run" id="sqB" type="button">Run statement</button><button class="linkbtn" id="sqR" type="button">Restore example</button>
+              <span class="lab__warn" style="flex:1">This runs exactly as typed. It can read and change the demo database. Reset database (bottom left) puts it back. Only the first statement runs. Anything after the first ; is ignored.</span></div>
           </div>
-          <div class="slip">
-            <div class="fields">
-              <label class="field-label">
-                <span>Search term</span>
-                <input
-                  id="term"
-                  type="text"
-                  value="a"
-                  autocomplete="off"
-                  spellcheck="false"
-                />
-              </label>
-            </div>
-            <div class="actions">
-              <button id="searchBtn" type="button" data-role="primary">
-                Run comparison
-              </button>
-            </div>
-          </div>
-          <div class="pair pair--after">
-            <article class="record" id="searchSafe" data-flow="safe">
-              <span class="stamp" id="searchSafeStamp">not run</span>
-              <div class="record__head">
-                <h2 class="record__label">Safe query</h2>
-                <span class="record__chip">prepared</span>
-              </div>
-              <div class="field field--measured">
-                <span class="field__name">query</span>
-                <div class="field__body measured">
-                  <div class="ruler" id="searchSafeRuler" aria-hidden="true"></div>
-                  <span class="limit" aria-hidden="true"></span>
-                  <pre class="print" id="searchSafeQuery"></pre>
-                </div>
-              </div>
-              <div class="field">
-                <span class="field__name">bound</span>
-                <div class="field__body"><pre class="print" id="searchSafeBound"></pre></div>
-              </div>
-              <div class="field">
-                <span class="field__name">response</span>
-                <div class="field__body">
-                  <pre class="print print--response" id="searchSafeResponse" aria-live="polite"></pre>
-                </div>
-              </div>
-              <p class="tally" id="searchSafeTally"></p>
-              <p class="note" id="searchSafeNote" aria-live="polite"></p>
-            </article>
-            <article class="record" id="searchUnsafe" data-flow="unsafe">
-              <span class="stamp" id="searchUnsafeStamp">not run</span>
-              <div class="record__head">
-                <h2 class="record__label">Unsafe query</h2>
-                <span class="record__chip">interpolated</span>
-              </div>
-              <div class="field field--measured">
-                <span class="field__name">query</span>
-                <div class="field__body measured">
-                  <div class="ruler" id="searchUnsafeRuler" aria-hidden="true"></div>
-                  <span class="limit" aria-hidden="true"></span>
-                  <pre class="print" id="searchUnsafeQuery"></pre>
-                </div>
-              </div>
-              <div class="field">
-                <span class="field__name">bound</span>
-                <div class="field__body">
-                  <pre class="print">none &mdash; input is part of the SQL text</pre>
-                </div>
-              </div>
-              <div class="field">
-                <span class="field__name">response</span>
-                <div class="field__body">
-                  <pre class="print print--response" id="searchUnsafeResponse" aria-live="polite"></pre>
-                </div>
-              </div>
-              <p class="tally" id="searchUnsafeTally"></p>
-              <p class="note" id="searchUnsafeNote" aria-live="polite"></p>
-            </article>
-          </div>
-          <p class="why why--soft" id="searchNote" aria-live="polite"></p>
+          <div class="lab__res" id="sqOut"></div>
+          <div class="lab__logslot"></div>
         </section>
-
-        <section class="band" aria-labelledby="script-h">
-          <div class="running">
-            <p class="running__name" id="script-h">Your own statement</p>
-            <span class="running__note"
-              >POST /api/run-script &middot; nothing between it and sqlite3</span
-            >
-          </div>
-          <div class="slip">
-            <div class="fields">
-              <label class="field-label">
-                <span>SQL statement</span>
-                <textarea
-                  id="script"
-                  rows="4"
-                  spellcheck="false"
-                  autocomplete="off"
-                  autocapitalize="off"
-                  autocorrect="off"
-                >SELECT id, username FROM users
-WHERE username = '' OR '1'='1';</textarea
-                >
-              </label>
-              <div class="script-tools">
-                <button id="restoreBtn" type="button" class="linkish">Restore example</button>
-                <button id="resetBtn" type="button" class="linkish">Reset database</button>
-                <span id="resetNote" class="reset-note" role="status"></span>
-              </div>
-            </div>
-            <p class="notice">
-              This runs <strong>exactly as typed</strong> against the live demo
-              database. It can read every row, and it can write.
-              The database lives in memory and is reseeded from four
-              hardcoded users on every boot or when you press Reset database. It holds no real credentials.
-              <code>db.all</code> compiles one statement per call, so anything
-              you type after the first <code>;</code> is reported as never
-              compiled rather than quietly run. Your statement is kept in this
-              browser until you restore the example. Press <kbd>Ctrl</kbd>/<kbd>⌘</kbd>
-              + <kbd>Enter</kbd> to run it.
-            </p>
-            <div class="actions">
-              <button id="scriptBtn" type="button" data-role="primary">
-                Run statement
-              </button>
-            </div>
-          </div>
-          <div class="pair pair--single pair--after">
-            <article class="record" id="scriptRecord">
-              <span class="stamp" id="scriptStamp">not run</span>
-              <div class="record__head">
-                <h2 class="record__label">Statement record</h2>
-                <span class="record__chip">verbatim</span>
-              </div>
-              <div class="field field--measured">
-                <span class="field__name">statement</span>
-                <div class="field__body measured">
-                  <div class="ruler" id="scriptRuler" aria-hidden="true"></div>
-                  <span class="limit" aria-hidden="true"></span>
-                  <pre class="print" id="scriptQuery"></pre>
-                </div>
-              </div>
-              <div class="field">
-                <span class="field__name">bound</span>
-                <div class="field__body">
-                  <pre class="print">none &mdash; the statement is the request body</pre>
-                </div>
-              </div>
-              <div class="field">
-                <span class="field__name">call</span>
-                <div class="field__body"><pre class="print" id="scriptCall"></pre></div>
-              </div>
-              <div class="field">
-                <span class="field__name">response</span>
-                <div class="field__body">
-                  <pre class="print print--response" id="scriptResponse" aria-live="polite"></pre>
-                </div>
-              </div>
-              <p class="tally" id="scriptTally"></p>
-              <p class="note" id="scriptNote" aria-live="polite"></p>
-            </article>
-          </div>
-        </section>
-
-        <section class="band" aria-labelledby="skeleton-h">
-          <div class="running">
-            <p class="running__name" id="skeleton-h">Mitigation skeleton</p>
-            <span class="running__note">in order &mdash; each step depends on the last</span>
-          </div>
-          <ol class="skeleton">
-            <li>
-              <b>Trust boundary</b>
-              <span>Input arrives here. Everything downstream treats it as hostile by default.</span>
-            </li>
-            <li>
-              <b>Validation</b>
-              <span>Required fields and expected shapes, checked before any statement is built.</span>
-            </li>
-            <li>
-              <b>Parameter binding</b>
-              <span>Values travel beside the statement, never inside it. The fix for everything above.</span>
-            </li>
-            <li>
-              <b>Least privilege</b>
-              <span>The database account holds only the permissions the app actually uses.</span>
-            </li>
-            <li>
-              <b>Result handling</b>
-              <span>Return the columns the caller needs, and nothing more.</span>
-            </li>
-            <li>
-              <b>Testing</b>
-              <span>Run attack payloads before every release. This page is that test.</span>
-            </li>
-          </ol>
-        </section>
-
-        <template id="pairTpl">
-          <div class="feed__sheet">
-            <div class="running">
-              <p class="running__name" data-t="title">preset</p>
-              <span class="running__note" data-t="note"></span>
-            </div>
-            <div class="pair">
-              <article class="record" id="safeRecord{s}" data-flow="safe">
-                <span class="stamp" id="safeStamp{s}">safe</span>
-                <div class="record__head">
-                  <h2 class="record__label">Safe flow</h2>
-                  <span class="record__chip">prepared</span>
-                </div>
-                <div class="field field--measured">
-                  <span class="field__name">query</span>
-                  <div class="field__body measured">
-                    <div class="ruler" id="safeRuler{s}" aria-hidden="true"></div>
-                    <span class="limit" aria-hidden="true"></span>
-                    <pre class="print" id="safeQuery{s}"></pre>
-                  </div>
-                </div>
-                <div class="field">
-                  <span class="field__name">bound</span>
-                  <div class="field__body">
-                    <pre class="print" id="safeBinding{s}"></pre>
-                  </div>
-                </div>
-                <div class="field">
-                  <span class="field__name">call</span>
-                  <div class="field__body"><pre class="print" id="safeCall{s}"></pre></div>
-                </div>
-                <div class="field">
-                  <span class="field__name">response</span>
-                  <div class="field__body">
-                    <pre class="print print--response" id="safeResponse{s}"></pre>
-                  </div>
-                </div>
-                <p class="tally" id="safeTally{s}"></p>
-                <p class="note" id="safeNote{s}"></p>
-              </article>
-
-              <article class="record" id="unsafeRecord{s}" data-flow="unsafe">
-                <span class="stamp" id="unsafeStamp{s}">injected</span>
-                <div class="record__head">
-                  <h2 class="record__label">Unsafe flow</h2>
-                  <span class="record__chip">interpolated</span>
-                </div>
-                <div class="field field--measured">
-                  <span class="field__name">query</span>
-                  <div class="field__body measured">
-                    <div class="ruler" id="unsafeRuler{s}" aria-hidden="true"></div>
-                    <span class="limit" aria-hidden="true"></span>
-                    <pre class="print" id="unsafeQuery{s}"></pre>
-                  </div>
-                </div>
-                <div class="field">
-                  <span class="field__name">bound</span>
-                  <div class="field__body">
-                    <pre class="print">none &mdash; input is part of the SQL text</pre>
-                  </div>
-                </div>
-                <div class="field">
-                  <span class="field__name">call</span>
-                  <div class="field__body"><pre class="print" id="unsafeCall{s}"></pre></div>
-                </div>
-                <div class="field">
-                  <span class="field__name">response</span>
-                  <div class="field__body">
-                    <pre class="print print--response" id="unsafeResponse{s}"></pre>
-                  </div>
-                </div>
-                <p class="tally" id="unsafeTally{s}"></p>
-                <p class="note" id="unsafeNote{s}"></p>
-              </article>
-            </div>
-          </div>
-        </template>
-
-        <footer class="colophon">
-          <div>
-            <h2>Endpoints</h2>
-            <code>GET /api/health</code><br />
-            <code>POST /api/login-demo</code><br />
-            <code>GET /api/search-demo</code><br />
-            <code>POST /api/run-script</code>
-          </div>
-          <div>
-            <h2>Seeded users</h2>
-            <code>alice / pw123</code><br />
-            <code>bob / hunter2</code><br />
-            <code>admin / rootpass</code><br />
-            <code>charlie / letmein</code>
-          </div>
-          <div>
-            <h2>Disclaimer</h2>
-            Educational demo. The vulnerable route is deliberate and runs against a local
-            throwaway database. No real authentication, no production credentials.
-          </div>
-        </footer>
-      </div>
-
-      <div class="rail" aria-hidden="true"></div>
+        <aside class="log" id="log" aria-label="What the database ran" hidden>
+          <div class="log__head"><b>What the database ran</b><button class="linkbtn" type="button" id="logClear">Clear</button></div>
+          <div class="log__off" id="logOff" role="status" hidden>Log paused: server not reachable.</div>
+          <div class="log__list" id="logList"></div>
+        </aside>
+      </main>
     </div>
 
     <script>
       "use strict";
 
+      /* ---------------- shared helpers, used by sub-plans 2 and 3 ---------------- */
+
       const $ = (id) => document.getElementById(id);
       const pretty = (v) => JSON.stringify(v, null, 2);
       const FIELD = 72; /* the printer's field width, in characters */
-
-      /* ---------------- the column ruler ---------------- */
-
-      const ruler = (host) => {
-        if (host.childElementCount) return;
-        for (let col = 0; col < FIELD; col += 10) {
-          const tick = document.createElement("span");
-          tick.textContent = String(col).padStart(2, "0");
-          host.append(tick);
-        }
-      };
-
-      ["safeRuler", "unsafeRuler", "searchSafeRuler", "searchUnsafeRuler", "scriptRuler"].forEach((id) =>
-        ruler($(id)),
-      );
+      const esc = (s) =>
+        String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
       /* ---------------- printing a statement ----------------
          The statement is printed exactly as the server built it, with three
@@ -1805,42 +520,22 @@ WHERE username = '' OR '1'='1';</textarea
         if (escaped) box?.setAttribute("data-overflow", "");
       }
 
-      /* ---------------- the carriage, without forcing layout ----------------
-         The sheet feeds down, then prints itself field by field: 90ms per
-         field of advance, 260ms per wipe, stamp last. Re-printing cancels
-         whatever is still in flight, so hammering a button restarts one
-         sequence instead of stacking copies of it.
-         ------------------------------------------------------------------- */
-
-      const ADVANCE = 90;
-
-      function printing(record) {
-        record.getAnimations?.({ subtree: true }).forEach((a) => a.cancel());
-        record.removeAttribute("data-printing");
-        /* re-reading a style property here is the only reflow we pay for,
-           and it buys us a replayable sequence without a class thrash */
-        void record.offsetWidth;
-        record.dataset.printing = "";
-
-        const lines = record.querySelectorAll(".print, .tally, .note");
-        lines.forEach((line, i) => line.style.setProperty("--d", `${i * ADVANCE}ms`));
-        record.style.setProperty("--stamp-d", `${(lines.length - 1) * ADVANCE}ms`);
-      }
-
-      /* called when a response arrives but nothing should print: stop the
-         sheet that was mid-print rather than wiping its text under it */
-      function settle(record) {
-        record.getAnimations?.({ subtree: true }).forEach((a) => a.cancel());
-        record.removeAttribute("data-printing");
-      }
-
       /* ---------------- request plumbing ---------------- */
+
+      const STAGE_STAMP = { slow: "still printing", late: "near the limit" };
+      /* a slow request marks each sheet it will fill; printing()/settle() clear it */
+      const stageRecords = (pairs) => (stage) => {
+        for (const [rec, stamp] of pairs) {
+          rec.dataset.stage = stage;
+          stamp.textContent = STAGE_STAMP[stage];
+        }
+      };
 
       const tokens = new Map();
 
       /* keyed per record, not per path: both login modes POST to the same
          endpoint, so a path key would let one cancel its own sibling */
-      async function ask(key, path, init) {
+      async function ask(key, path, init, onStage) {
         const ticket = (tokens.get(key) || 0) + 1;
         tokens.set(key, ticket);
         const fail = (msg, kind, extra) => {
@@ -1851,19 +546,22 @@ WHERE username = '' OR '1'='1';</textarea
         };
         const ctl = new AbortController();
         const timer = setTimeout(() => ctl.abort(), 8000);
+        const stage = (name) => () => {
+          if (typeof onStage === "function" && ticket === tokens.get(key)) onStage(name);
+        };
+        const slow = setTimeout(stage("slow"), 2000);
+        const late = setTimeout(stage("late"), 5000);
         try {
           let res;
           try {
             res = await fetch(path, { ...(init || {}), signal: ctl.signal });
           } catch (e) {
             const err = fail(e.message || "fetch failed", e.name === "AbortError" ? "timeout" : "offline");
-            if (err.kind === "offline") setLamp("down");
             throw err;
           }
           const type = res.headers.get("content-type") || "";
           if (!type.includes("application/json")) {
             /* no JSON at all: the API is not behind this page */
-            setLamp("down");
             throw fail(`HTTP ${res.status} — no API behind this page`, "offline", { status: res.status });
           }
           let body;
@@ -1871,10 +569,8 @@ WHERE username = '' OR '1'='1';</textarea
             body = await res.json();
           } catch (e) {
             if (e.name === "AbortError") throw fail("timed out", "timeout");
-            setLamp("down");
             throw fail(`HTTP ${res.status} — unreadable response`, "offline", { status: res.status });
           }
-          setLamp("up");
           if (ticket !== tokens.get(key)) throw fail("superseded", "superseded");
           /* The HTTP status decides whether the statement ran, not the shape of
              the body. The server's rejection branches deliberately reuse the
@@ -1900,6 +596,8 @@ WHERE username = '' OR '1'='1';</textarea
           return body;
         } finally {
           clearTimeout(timer);
+          clearTimeout(slow);
+          clearTimeout(late);
         }
       }
 
@@ -1908,36 +606,9 @@ WHERE username = '' OR '1'='1';</textarea
         timeout: { outcome: "timeout", stamp: "timed out", tally: "stopped after 8 seconds", note: () => "The request ran longer than 8 seconds and was stopped on this page. The server may still be busy with it." },
         stopped: { outcome: "timeout", stamp: "timed out", tally: "stopped by the server after 6 seconds", note: (err) => err.message },
         refused: { outcome: "refused", stamp: "refused", tally: "refused before any statement ran", note: (err) => err.message },
-        engine: { outcome: "rejected", stamp: "engine error", tally: "the database rejected the statement", note: (err) => /no such table/i.test(err.message) ? `${err.message} The users table is gone. Press Reset database to restore the four users.` : err.message },
+        engine: { outcome: "rejected", stamp: "engine error", tally: "the database rejected the statement", note: (err) => /no such table/i.test(err.message) ? `${err.message} The users table is gone. Press Reset database to restore the eight users.` : err.message },
       };
       const failOf = (err) => FAIL[err.kind] || FAIL.offline;
-
-      function setLamp(state) {
-        const lamp = $("lamp");
-        lamp.dataset.state = state;
-        lamp.textContent = {
-          checking: "checking backend",
-          up: "backend online",
-          down: "backend unreachable — nothing can print",
-        }[state];
-      }
-
-      function setVerdict(safe, unsafe, err) {
-        const word = (r) => {
-          if (!r) return "printing…";
-          if (r.data) {
-            const n = r.data.result?.length ?? 0;
-            return `${n} ${n === 1 ? "row" : "rows"}`;
-          }
-          return failOf(r.err || {}).stamp;
-        };
-        if (err) {
-          $("verdictSafe").textContent = $("verdictUnsafe").textContent = failOf(err).stamp;
-        } else {
-          $("verdictSafe").textContent = word(safe);
-          $("verdictUnsafe").textContent = word(unsafe);
-        }
-      }
 
       function tally(host, rows, word, extra) {
         const n = Array.isArray(rows) ? rows.length : 0;
@@ -1951,451 +622,646 @@ WHERE username = '' OR '1'='1';</textarea
       const busy = (btn, on) => {
         if (!btn) return;
         btn.disabled = on;
-        if (on) btn.setAttribute("aria-busy", "true");
-        else btn.removeAttribute("aria-busy");
+        if (on) {
+          if (!btn.hasAttribute("aria-busy")) { btn.dataset.label = btn.textContent; btn.textContent = "Running…"; }
+          btn.setAttribute("aria-busy", "true");
+        } else {
+          if (btn.dataset.label) btn.textContent = btn.dataset.label;
+          delete btn.dataset.label;
+          btn.removeAttribute("aria-busy");
+        }
       };
+
+      /* ---------------- result reveal (stagger index, count-up) ---------------- */
+      const REDUCED = matchMedia("(prefers-reduced-motion: reduce)");
+      function countUp(el) {
+        const m = /\d+/.exec(el.textContent);
+        const end = m ? +m[0] : 0;
+        if (!end) return;
+        const text = el.textContent, pre = text.slice(0, m.index), post = text.slice(m.index + m[0].length);
+        const id = (el._cu = (el._cu || 0) + 1);
+        el.innerHTML = "";
+        const sr = document.createElement("span");
+        sr.className = "sr";
+        sr.textContent = text;
+        el.append(sr);
+        el.classList.add("cu");
+        const t0 = performance.now(), dur = 420; /* = --t-feed */
+        const step = (now) => {
+          if (el._cu !== id) return;
+          const k = Math.min(1, (now - t0) / dur);
+          if (k < 1) {
+            el.dataset.v = pre + Math.round(end * k) + post;
+            requestAnimationFrame(step);
+          } else {
+            el.classList.remove("cu");
+            el.textContent = text;
+          }
+        };
+        el.dataset.v = pre + "0" + post;
+        requestAnimationFrame(step);
+      }
+      function reveal(root) {
+        root.querySelectorAll(".grid4, .lrows, .lab__table tbody").forEach((p) =>
+          [...p.children].forEach((c, i) => c.style.setProperty("--i", i)));
+        if (REDUCED.matches || document.hidden) return;
+        root.querySelectorAll(".big, .cnt, .home__n").forEach(countUp);
+      }
 
       const call = (method, query, bound) =>
         bound
           ? `${method}(${JSON.stringify(query)}, ${pretty(bound)}, callback)`
           : `${method}(${JSON.stringify(query)}, callback)`;
 
-      /* ---------------- one login request, one sheet ---------------- */
+      /* ---------------- live injection tape ----------------
+         Client-side sketch of what each path builds; the server is the truth. */
 
-      /* `sfx` names the sheet being printed. The proof pair is the page's own markup
-         and carries no suffix; every sheet the roll prints is a clone of the
-         same markup with its own. One filler, so the roll cannot drift from
-         the proof on anything but the payload. */
-      function fillLogin(mode, sfx, data, err, typed) {
-        const unsafe = mode === "vulnerable";
-        const s = (id) => id + sfx;
-        const ids = unsafe
-          ? { query: s("unsafeQuery"), call: s("unsafeCall"), res: s("unsafeResponse"), tally: s("unsafeTally"), stamp: s("unsafeStamp"), rec: s("unsafeRecord"), bound: null, note: s("unsafeNote") }
-          : { query: s("safeQuery"), call: s("safeCall"), res: s("safeResponse"), tally: s("safeTally"), stamp: s("safeStamp"), rec: s("safeRecord"), bound: s("safeBinding"), note: s("safeNote") };
+      const TAPE_HEAD = "SELECT id, username FROM users WHERE username = '";
+      const TAPE_MID = "' AND password = '";
 
-        const el = $(ids.rec);
-        const payload = data ? { ...data } : null;
-        delete payload?.query;
-        delete payload?.boundValues;
-
-        if (err) {
-          const f = failOf(err);
-          el.dataset.outcome = f.outcome;
-          $(ids.stamp).textContent = f.stamp;
-          /* The statement that was refused is the most informative thing on
-             this sheet. Printing it is the difference between "the engine
-             said no" and "here is what the engine refused, verbatim". */
-          const sent = err.body?.query;
-          printStatement($(ids.query), sent || "", typed || [], err.body?.executed);
-          if (ids.bound) {
-            $(ids.bound).textContent = sent ? pretty(err.body.boundValues) || "—" : "—";
-          }
-          $(ids.call).textContent = sent
-            ? call(unsafe ? "db.all" : "db.get", sent, err.body.boundValues)
-            : "—";
-          $(ids.res).textContent = pretty({ error: f.note(err) });
-          $(ids.note).textContent = f.note(err);
-          $(ids.tally).textContent = f.tally;
-          printing(el);
-          return;
-        }
-
-        el.dataset.outcome = payload.status === "safe" ? "safe" : "injected";
-        $(ids.stamp).textContent = payload.status === "safe" ? "safe" : "injected";
-        $(ids.note).textContent = payload.note || "";
-
-        printStatement($(ids.query), data.query, typed, data.executed);
-        /* the whole point of the safe path: the values exist, on their own
-           channel, and never appear in the statement itself */
-        if (ids.bound) $(ids.bound).textContent = pretty(data.boundValues) || "—";
-        $(ids.call).textContent = data.query ? call(unsafe ? "db.all" : "db.get", data.query, data.boundValues) : "—";
-        $(ids.res).textContent = pretty(payload);
-        tally($(ids.tally), payload.result, "row");
-
-        printing(el);
-      }
-
-      /* `creds` lets the roll fire a payload without claiming the request slip,
-         and `tag` keeps its requests off the proof's cancellation key so a
-         second roll cancels the first roll instead of the first run's sheets. */
-      async function runLogin(mode, btn, creds, sfx = "", tag = "") {
-        busy(btn, true);
-        const body = {
-          mode,
-          username: creds?.username ?? $("username").value,
-          password: creds?.password ?? $("password").value,
+      function tapeScan(u, p) {
+        const a = TAPE_HEAD.length;
+        const b = a + u.length + TAPE_MID.length;
+        const s = TAPE_HEAD + u + TAPE_MID + p + "'";
+        const inRange = (i) => (i >= a && i < a + u.length) || (i >= b && i < b + p.length);
+        const cls = new Array(s.length).fill("");
+        let inStr = false;
+        let comment = false;
+        let escCol = null;
+        const put = (i, c) => {
+          if (!inRange(i)) return;
+          cls[i] = c;
+          if (c === "tape__esc" && escCol === null) escCol = i;
         };
-        try {
-          const data = await ask(`login:${tag}${mode}`, "/api/login-demo", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body),
-          });
-          fillLogin(
-            mode,
-            sfx,
-            data,
-            null,
-            mode === "vulnerable" ? [body.username, body.password] : [],
-          );
-          return { data };
-        } catch (err) {
-          if (err.kind === "refused" && !creds) {
-            const empty = ["username", "password"].filter((id) => !$(id).value);
-            empty.forEach((id) => $(id).setAttribute("aria-invalid", "true"));
-            if (empty.length) $(empty[0]).focus();
+        for (let i = 0; i < s.length; ) {
+          const ch = s[i];
+          if (inStr && ch === "'") {
+            if (s[i + 1] === "'") {
+              put(i, "tape__in");
+              put(i + 1, "tape__in");
+              i += 2;
+              continue;
+            }
+            inStr = false;
+            put(i, "tape__esc");
+          } else if (!inStr && ch === "'") {
+            inStr = true;
+            put(i, "tape__esc");
+          } else if (!inStr && ch === "-" && s[i + 1] === "-") {
+            comment = true;
+            for (let j = i; j < s.length; j++) cls[j] = "tape__cmt";
+            break;
+          } else {
+            put(i, inStr ? "tape__in" : "tape__esc");
           }
-          if (err.kind === "superseded") return { superseded: true };
-          fillLogin(
-            mode,
-            sfx,
-            null,
-            err,
-            mode === "vulnerable" ? [body.username, body.password] : [],
-          );
-          return { err };
-        } finally {
-          busy(btn, false);
+          i++;
         }
+        return { s, cls, escCol, comment, broken: inStr };
       }
 
-      /* ---------------- arming a payload ---------------- */
-
-      function arm(name) {
-        const preset = name ?? $("preset").value;
-        $("username").value = preset;
-        $("password").value = preset === "alice" ? "pw123" : "anything' OR '1'='1";
-        if (name) $("preset").value = name;
-        return preset;
-      }
-
-      /* ---------------- the pre-run proof ----------------
-         The form is armed with the real bypass before either request
-         leaves, so what the reviewer reads in the fields is exactly the
-         string the records printed.
-         ------------------------------------------------------------- */
-
-      const BYPASS = "' OR '1'='1 --";
-
-      async function proof() {
-        arm(BYPASS);
-        $("proof-note").textContent = "pre-run on load";
-        setVerdict(null, null);
-        const [safe, unsafe] = await Promise.all([
-          runLogin("safe", $("safeBtn")),
-          runLogin("vulnerable", $("unsafeBtn")),
-        ]);
-        if (safe.superseded || unsafe.superseded) return;
-        setVerdict(safe, unsafe);
-        const stolen = unsafe.data?.result?.length ?? 0;
-        const held = safe.data?.result?.length ?? 0;
-        const note = $("proof-note");
-        note.textContent = "pre-run on load";
-        if (stolen > held) {
-          const strong = document.createElement("strong");
-          strong.textContent = `${stolen} rows`;
-          note.textContent = "pre-run on load · the same bypass returned ";
-          note.append(strong, " the safe path refused");
+      /* pure DOM-free half of the old renderTape: turn tapeScan output into nodes */
+      function tapeSpans(s, cls) {
+        const frag = document.createDocumentFragment();
+        for (let i = 0; i < s.length; ) {
+          let j = i + 1;
+          while (j < s.length && cls[j] === cls[i]) j++;
+          if (cls[i]) {
+            const sp = document.createElement("span");
+            sp.className = cls[i];
+            sp.textContent = s.slice(i, j);
+            frag.append(sp);
+          } else frag.append(s.slice(i, j));
+          i = j;
         }
+        return frag;
       }
 
-      /* ---------------- the preset roll ----------------
-         A batch is not a summary of the payloads; it is the same fanfold
-         running five form feeds, each feeding its safe sheet and then its
-         carbon sheet from the very markup the proof pair uses. One pair at a
-         time, and each gets the carriage to finish before the next tears off,
-         so the reviewer watches five runs instead of one flash.
-         ------------------------------------------------------------- */
-
-      function makePair(sfx, title) {
-        const frag = $("pairTpl").content.cloneNode(true);
-        frag.querySelectorAll("[id]").forEach((el) => {
-          el.id = el.id.replace("{s}", sfx);
-        });
-        const sheet = frag.querySelector(".feed__sheet");
-        sheet.querySelector('[data-t="title"]').textContent = title;
-        /* the clone's rulers are empty: template content is inert, so the
-           ticks are built here, once the ids are final */
-        sheet.querySelectorAll(".ruler").forEach((el) => ruler(el));
-        return sheet;
-      }
-
-      function verdict(held, stolen, safe, unsafe) {
-        if (!safe && !unsafe) return "both paths refused the request";
-        if (!unsafe) return "the interpolated statement was refused by the engine";
-        if (!safe) return "the bound path refused the request";
-        if (stolen > held) {
-          return `${stolen} ${stolen === 1 ? "row" : "rows"} escaped · the bound path returned ${held}`;
-        }
-        return `both paths returned ${held} ${held === 1 ? "row" : "rows"}`;
-      }
-
-      let rollRun = 0;
-
-      async function rollAll(btn) {
-        const run = ++rollRun;
-        busy(btn, true);
-        const feed = $("rollFeed");
-        feed.textContent = "";
-        /* the wait is part of the print, not decoration: reduced motion has
-           already taken the movement away, so it takes the pause too */
-        const wait = matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 900;
-        let printed = 0;
+      /* typed fields persisted across refresh; storage may be unavailable */
+      const FIELDS_KEY = "sqlshield.fields";
+      const saveFields = (obj) => {
         try {
-          for (const [i, opt] of [...$("preset").options].entries()) {
-            if (run !== rollRun) return;
-            const title = opt.textContent.trim();
-            const sheet = makePair(`r${i}`, title);
-            feed.append(sheet);
-            /* arm first: the request slip must hold the payload whose sheets
-               are about to print, or the roll is printing something the fields
-               above never said */
-            arm(opt.value);
-            const [safe, unsafe] = await Promise.all([
-              runLogin("safe", null, null, `r${i}`, `roll${run}:`),
-              runLogin("vulnerable", null, null, `r${i}`, `roll${run}:`),
-            ]);
-            if (run !== rollRun) return;
-            if (safe.superseded || unsafe.superseded) return;
-            const line = verdict(
-              safe.data?.result?.length ?? 0,
-              unsafe.data?.result?.length ?? 0,
-              safe.data,
-              unsafe.data,
-            );
-            sheet.querySelector('[data-t="note"]').textContent = line;
-            $("rollStatus").textContent = `${title}: ${line}`;
-            printed += 1;
-            if (wait) await new Promise((r) => setTimeout(r, wait));
-          }
-          $("rollStatus").textContent = `${printed} presets printed, each against both paths.`;
-        } finally {
-          if (run === rollRun) busy(btn, false);
-        }
-      }
-
-      /* ---------------- search ---------------- */
-
-      async function runSearch(btn) {
-        const term = $("term").value;
-        busy(btn, true);
-        const safeRec = $("searchSafe");
-        const unsafeRec = $("searchUnsafe");
-        try {
-          const data = await ask(
-            "search",
-            `/api/search-demo?term=${encodeURIComponent(term)}`,
-          );
-          /* The unsafe record is not INJECTED by construction — it becomes an
-           injection when it returned rows the safe path refused. A term like
-           "al" runs the same interpolated statement and leaks nothing, and
-           stamping it INJECTED there would teach the reader to ignore the
-           word. Same rule as the login proof: compare the two counts. */
-          const leaked = (data.unsafe?.length ?? 0) > (data.safe?.length ?? 0);
-          const verdict = leaked ? "injected" : "no injection";
-
-          $("searchSafeStamp").textContent = "safe";
-          $("searchUnsafeStamp").textContent = verdict;
-          safeRec.dataset.outcome = "safe";
-          unsafeRec.dataset.outcome = leaked ? "injected" : "safe";
-
-          printStatement($("searchSafeQuery"), data.queries?.safe);
-          $("searchSafeBound").textContent = pretty(data.boundValues?.safe);
-          $("searchSafeResponse").textContent = pretty(data.safe);
-          tally($("searchSafeTally"), data.safe, "row");
-
-          printStatement($("searchUnsafeQuery"), data.queries?.unsafe, [term], data.executed?.unsafe);
-          $("searchUnsafeResponse").textContent = pretty(data.unsafe);
-          tally($("searchUnsafeTally"), data.unsafe, "row");
-
-          $("searchNote").textContent = data.note || "";
-          $("searchSafeNote").textContent = data.note || "";
-          $("searchUnsafeNote").textContent = data.note || "";
-          printing(safeRec);
-          printing(unsafeRec);
-        } catch (err) {
-          if (err.kind === "superseded") return;
-          const f = failOf(err);
-          for (const [rec, stamp, res, tal] of [
-            [safeRec, "searchSafeStamp", "searchSafeResponse", "searchSafeTally"],
-            [unsafeRec, "searchUnsafeStamp", "searchUnsafeResponse", "searchUnsafeTally"],
-          ]) {
-            rec.dataset.outcome = f.outcome;
-            $(stamp).textContent = f.stamp;
-            $(res).textContent = pretty({ error: f.note(err) });
-            $(tal).textContent = f.tally;
-          }
-          $("searchNote").textContent = `Search failed: ${f.note(err)}`;
-          settle(safeRec);
-          settle(unsafeRec);
-        } finally {
-          busy(btn, false);
-        }
-      }
-
-      /* ---------------- the reviewer's own statement ----------------
-         Nothing here is interpolated and nothing here is escaped: the statement
-         is the request body, so the record's only job is to report what the
-         engine did with it. The stamp says RAN, never SAFE — this sheet is not
-         evidence that anything was mitigated — and only a statement SQLite
-         refuses earns the alarm hue.
-         ------------------------------------------------------------- */
-
-      function fillScript(data, err) {
-        const el = $("scriptRecord");
-        if (err) {
-          const f = failOf(err);
-          el.dataset.outcome = f.outcome;
-          $("scriptStamp").textContent = f.stamp;
-          /* the refused statement prints like any other: the reviewer typed
-             it, the engine compiled or rejected it, and the sheet reports
-             which without pretending nothing was sent */
-          const sent = err.body?.query;
-          printStatement($("scriptQuery"), sent || "", [], err.body?.executed);
-          $("scriptCall").textContent = sent ? call("db.all", sent) : "—";
-          $("scriptResponse").textContent = pretty({ error: f.note(err) });
-          $("scriptNote").textContent = f.note(err);
-          $("scriptTally").textContent = f.tally;
-          printing(el);
-          return;
-        }
-
-        delete el.dataset.outcome;
-        $("scriptStamp").textContent = "ran";
-        $("scriptNote").textContent = data.note || "";
-        printStatement($("scriptQuery"), data.query, [], data.executed);
-        $("scriptCall").textContent = call("db.all", data.query);
-        $("scriptResponse").textContent = pretty(data.result);
-        const changed = Number(data.changes) || 0;
-        tally(
-          $("scriptTally"),
-          data.result,
-          "row",
-          changed ? `${changed} ${changed === 1 ? "row" : "rows"} changed` : "",
-        );
-        printing(el);
-      }
-
-      async function runScript(btn) {
-        busy(btn, true);
-        try {
-          const data = await ask("script", "/api/run-script", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ script: $("script").value }),
-          });
-          fillScript(data);
-        } catch (err) {
-          if (err.kind === "superseded") return;
-          fillScript(null, err);
-        } finally {
-          busy(btn, false);
-        }
-      }
-
-      /* ---------------- wiring ---------------- */
-
-      /* choosing a preset arms it: no separate load step */
-      $("preset").addEventListener("change", () => arm());
-
-      /* Enter sends the request slip through both paths, side by side */
-      const runBoth = () => {
-        runLogin("safe", $("safeBtn"));
-        runLogin("vulnerable", $("unsafeBtn"));
+          localStorage.setItem(FIELDS_KEY, JSON.stringify(obj));
+        } catch {}
       };
-      for (const id of ["username", "password"]) {
-        $(id).addEventListener("keydown", (e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            runBoth();
-          }
-        });
-        $(id).addEventListener("input", () => $(id).removeAttribute("aria-invalid"));
+      const loadFields = () => {
+        try {
+          return JSON.parse(localStorage.getItem(FIELDS_KEY));
+        } catch {
+          return null;
+        }
+      };
+      const clearFields = () => {
+        try {
+          localStorage.removeItem(FIELDS_KEY);
+        } catch {}
+      };
+
+      /* ---------------- health, banner, reset ---------------- */
+
+      const banner = $("banner");
+      const showBanner = (text, withReset) => {
+        $("bannerText").textContent = text;
+        $("bannerReset").hidden = !withReset;
+        banner.hidden = false;
+      };
+
+      async function checkHealth() {
+        let d = null;
+        try {
+          const r = await fetch("/api/health", { cache: "no-store" });
+          if (r.ok) d = await r.json();
+        } catch {}
+        if (!d) {
+          $("dbUsers").textContent = "unavailable";
+          showBanner("The demo server is not running. Start it with npm start, then reload this page.", false);
+          return null;
+        }
+        $("dbUsers").textContent = `${d.users} users`;
+        if (d.db === "damaged") showBanner("The users table was deleted. Reset the demo to bring it back.", true);
+        else banner.hidden = true;
+        return d;
       }
-      $("term").addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          runSearch($("searchBtn"));
-        }
-      });
-      $("script").addEventListener("keydown", (e) => {
-        if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-          e.preventDefault();
-          runScript($("scriptBtn"));
-        }
-      });
 
-      /* the typed statement survives a refresh; storage may be unavailable */
-      const SCRIPT_KEY = "sqlshield.script";
-      const exampleScript = $("script").defaultValue;
-      try {
-        const saved = localStorage.getItem(SCRIPT_KEY);
-        if (saved) $("script").value = saved;
-      } catch {}
-      $("script").addEventListener("input", () => {
-        try {
-          localStorage.setItem(SCRIPT_KEY, $("script").value);
-        } catch {}
-      });
-      $("restoreBtn").addEventListener("click", () => {
-        $("script").value = exampleScript;
-        try {
-          localStorage.removeItem(SCRIPT_KEY);
-        } catch {}
-        $("script").focus();
-      });
-
-      $("resetBtn").addEventListener("click", async () => {
-        const btn = $("resetBtn");
+      let resetTimer = 0;
+      async function resetDatabase() {
         const note = $("resetNote");
-        btn.disabled = true;
-        note.textContent = "Resetting…";
+        let ok = false;
+        $("resetBtn").disabled = true;
+        clearTimeout(resetTimer);
         try {
           const res = await fetch("/api/reset", { method: "POST" });
           const body = await res.json().catch(() => ({}));
           if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
-          note.textContent = body.message;
-          proof();
+          note.textContent = body.message || "Database reset. 8 users restored.";
+          ok = true;
         } catch (e) {
           note.textContent = e instanceof TypeError ? "No response from the server." : e.message;
         } finally {
-          btn.disabled = false;
+          $("resetBtn").disabled = false;
         }
+        note.hidden = false;
+        resetTimer = setTimeout(() => (note.hidden = true), 3000);
+        await checkHealth();
+        if (ok) {
+          const n = $("dbUsers");
+          n.classList.remove("flash");
+          void n.offsetWidth;
+          n.classList.add("flash");
+        }
+        document.dispatchEvent(new CustomEvent("sqlshield:reset"));
+      }
+      $("resetBtn").addEventListener("click", resetDatabase);
+      $("bannerReset").addEventListener("click", resetDatabase);
+
+      /* every 10 s, only while the tab is visible */
+      setInterval(() => {
+        if (!document.hidden) checkHealth();
+      }, 10000);
+      document.addEventListener("visibilitychange", () => {
+        if (!document.hidden) checkHealth();
       });
 
-      $("safeBtn").addEventListener("click", () => runLogin("safe", $("safeBtn")));
-      $("unsafeBtn").addEventListener("click", () =>
-        runLogin("vulnerable", $("unsafeBtn")),
-      );
-      $("rerunBtn").addEventListener("click", proof);
-      $("rollBtn").addEventListener("click", () => rollAll($("rollBtn")));
-      $("searchBtn").addEventListener("click", () => runSearch($("searchBtn")));
-      $("scriptBtn").addEventListener("click", () => runScript($("scriptBtn")));
+      /* ---------------- router ---------------- */
 
-      async function checkHealth() {
-        try {
-          const r = await fetch("/api/health", { cache: "no-store" });
-          const d = await r.json();
-          setLamp(d.ok ? "up" : "down");
-          return !!d.ok;
-        } catch {
-          setLamp("down");
-          return false;
+      const screens = [...document.querySelectorAll("[data-screen]")];
+      const links = [...document.querySelectorAll(".rail__link")];
+
+      let prevWant = null;
+      const lessonNo = (w) => /^learn\/(\d)$/.exec(w || "")?.[1];
+      function route() {
+        const want = location.hash.replace(/^#\//, "") || "home";
+        const sec = screens.find((s) => s.dataset.screen === want);
+        if (!sec) {
+          location.hash = "#/";
+          return;
         }
+        $("app").toggleAttribute("data-home", want === "home");
+        const a = lessonNo(prevWant), b = lessonNo(want);
+        screens.forEach((s) => { s.hidden = s !== sec; s.classList.remove("enter"); });
+        sec.dataset.dir = a && b && a !== b ? (+b > +a ? "next" : "prev") : "y";
+        void sec.offsetWidth; /* restart the animation on every navigation */
+        sec.classList.add("enter");
+        prevWant = want;
+        links.forEach((a) => {
+          if (a.getAttribute("href") === "#/" + want) a.setAttribute("aria-current", "page");
+          else a.removeAttribute("aria-current");
+        });
+        document.title = want === "home" ? "SQLShield · How SQL injection works, and how to stop it" : "SQLShield · " + sec.dataset.title;
+        $("screen").scrollTop = 0;
+        sec.querySelector("h1").focus({ preventScroll: true });
       }
+      window.addEventListener("hashchange", route);
 
-      /* re-check every 10 s, only while the tab is visible, so a dead server
-         never sits under a lamp that still says online */
-      setInterval(() => {
-        if (document.visibilityState === "visible") checkHealth();
-      }, 10000);
+      document.addEventListener("keydown", (e) => {
+        if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+        if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+        if (e.target.closest?.("input, textarea, select, [contenteditable]")) return;
+        const m = /^#\/learn\/(\d)$/.exec(location.hash);
+        if (!m) return;
+        const n = +m[1] + (e.key === "ArrowRight" ? 1 : -1);
+        if (n >= 1 && n <= 6) location.hash = "#/learn/" + n;
+      });
 
-      (async () => {
-        setLamp("checking");
-        await (document.fonts?.ready ?? Promise.resolve());
-        if (await checkHealth()) proof();
-        else setVerdict(null, null, { kind: "offline" });
-      })();
+      /* ---------------- lessons ---------------- */
+
+      const queryLine = (text, typed = [], safe = false) => {
+        let html = "";
+        if (safe) html = esc(text).replace(/\?/g, '<span class="s">?</span>');
+        else {
+          let at = 0;
+          let pos = 0;
+          for (const t of typed) {
+            const i = t ? text.indexOf(t, pos) : -1;
+            if (i < 0) continue;
+            html += esc(text.slice(at, i)) + '<span class="u">' + esc(t) + "</span>";
+            at = pos = i + t.length;
+          }
+          html += esc(text.slice(at));
+        }
+        return `<div class="qline">${html}</div>`;
+      };
+      const resultBig = (n, kind, size) =>
+        `<div class="${size ? "cnt" : "big"} ${kind}">${n} user${n === 1 ? "" : "s"}</div>`;
+      const usersGrid = (rows) =>
+        rows.length ? `<div class="grid4">${rows.map((r) => `<div>${esc(r.username)}</div>`).join("")}</div>` : "";
+      const valuesRow = (vals, label = "sent separately:") =>
+        `<div class="vals"><span>${label}</span>${vals.map((v) => `<span class="chip">${esc(v)}</span>`).join("")}</div>`;
+
+      const post = (key, mode, username, password) =>
+        ask(key, "/api/login-demo", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mode, username, password }),
+        });
+      const showErr = (out, err) => {
+        if (err.kind !== "superseded") out.innerHTML = `<div class="err">${esc(failOf(err).note(err))}</div>`;
+      };
+      const waiting = (out) => (out.innerHTML = '<div class="wait">Asking the database…</div>');
+      const typedAttack = "' OR 1=1 --";
+      const SEARCH_TERM = "x' OR 1=1 --";
+
+      const card = (cls, title, count, kind, body) =>
+        `<div class="card ${cls}"><div class="card__head"><b>${title}</b>${resultBig(count, kind, 1)}</div>${body}</div>`;
+
+      const LESSONS = [
+        {
+          title: "How a login works",
+          text: [
+            "When you log in, the website asks its database one question:",
+            "Find the user whose name is <b>alice</b> and whose password is <b>pw123</b>.",
+            "If a row matches, you are in. If none matches, the login refuses.",
+          ],
+          demo: `<div class="dh">The users table</div>
+            <table class="utable"><thead><tr><th>id</th><th>username</th><th>password</th></tr></thead><tbody>
+            <tr class="hi"><td>1</td><td>alice</td><td>pw123</td></tr><tr><td>2</td><td>bob</td><td>hunter2</td></tr>
+            <tr><td>3</td><td>admin</td><td>rootpass</td></tr><tr><td>4</td><td>charlie</td><td>letmein</td></tr>
+            <tr><td>5</td><td>dave</td><td>sunshine</td></tr><tr><td>6</td><td>erin</td><td>qwerty12</td></tr><tr><td>7</td><td>frank</td><td>dragon99</td></tr><tr><td>8</td><td>grace</td><td>iloveyou</td></tr></tbody></table>
+            <div class="note">Made-up sample users in a throwaway database.</div>
+            <div class="dh">The question the database got</div><div class="out"></div>`,
+          async run(d) {
+            const out = d.querySelector(".out");
+            waiting(out);
+            try {
+              const r = await post("l1", "safe", "alice", "pw123");
+              const row = r.result[0];
+              out.innerHTML =
+                queryLine(r.query, [], true) + valuesRow(r.boundValues) +
+                resultBig(r.result.length, "held") +
+                `<div>${row ? `user found: ${esc(row.username)}. Logged in.` : "no user found. Login refused."}</div>`;
+              reveal(out);
+            } catch (e) { showErr(out, e); }
+          },
+        },
+        {
+          title: "The trick",
+          text: [
+            "The unsafe login builds its question by pasting your text into it.",
+            "So if your \"name\" contains a quote and some extra words, those words become part of the question.",
+            "Here the extra words say <b>\"or 1 equals 1\"</b>, which is true for every user.",
+          ],
+          demo: `<div class="row2"><label>Name<input id="l2u" class="bad" value="${esc(typedAttack)}" /></label>
+            <label>Password<input id="l2p" value="x" /></label><button class="btn" id="l2b" type="button">Log in (unsafe)</button></div>
+            <div class="dh">The question the database got</div><div class="out"></div>`,
+          async run(d) {
+            const out = d.querySelector(".out");
+            const u = d.querySelector("#l2u").value;
+            const p = d.querySelector("#l2p").value;
+            const b = d.querySelector("#l2b");
+            waiting(out);
+            busy(b, true);
+            try {
+              const r = await post("l2", "vulnerable", u, p);
+              const rows = r.result;
+              out.innerHTML =
+                queryLine(r.query, [u, p]) + resultBig(rows.length, rows.length ? "leak" : "held") +
+                `<div>${rows.length ? `came back. Logged in as <b>${esc(rows[0].username)}</b>.` : "No user matched. Login refused."}</div>` +
+                usersGrid(rows);
+              reveal(out);
+            } catch (e) { showErr(out, e); }
+            busy(b, false);
+          },
+          wire(d) { d.querySelector("#l2b").addEventListener("click", () => this.run(d)); },
+        },
+        {
+          title: "Why it worked",
+          text: [
+            "Three parts of the typed text do the damage.",
+            "The quote ends the name early.",
+            "<b>OR 1=1</b> is true for every row, so every user matches.",
+            "<b>--</b> turns the rest of the question into a comment, so the password check is skipped.",
+          ],
+          demo: `<div class="out"></div>`,
+          async run(d) {
+            const out = d.querySelector(".out");
+            waiting(out);
+            try {
+              const r = await post("l3", "vulnerable", typedAttack, "x");
+              const q = r.query;
+              const tail = q.slice(q.indexOf("username ="));
+              const s = "…" + tail;
+              const t = s.indexOf(typedAttack);
+              const dash = t + typedAttack.indexOf("--");
+              const end = t + typedAttack.length;
+              /* tiers: 0 apostrophe, 1 OR 1=1, 2 -- ; offsets in ch, text is monospace */
+              const ann = (at, tier, txt) =>
+                `<div class="ann" style="left:${at}ch;top:${tier * 28}px;height:24px">${txt}</div>`;
+              const mk = (a, b) => `<span class="mk">${esc(s.slice(a, b))}</span>`;
+              const html =
+                esc(s.slice(0, t)) + mk(t, t + 1) + esc(s.slice(t + 1, t + 2)) + mk(t + 2, t + 8) +
+                esc(s.slice(t + 8, dash)) + mk(dash, end) + `<span class="cmt">${esc(s.slice(end))}</span>`;
+              const ran = q.slice(0, q.indexOf("--")).trimEnd();
+              out.innerHTML =
+                `<div class="tapebox"><div class="tape">${html}</div>` +
+                `<div style="height:96px;position:relative">${ann(t, 0, "ends the name early")}${ann(t + 2, 1, "true for every user")}${ann(dash, 2, "turns the rest into a comment")}</div></div>` +
+                `<div class="dh">The database only ran:</div>` + queryLine(ran, [typedAttack]);
+            } catch (e) { showErr(out, e); }
+          },
+        },
+        {
+          title: "The fix",
+          text: [
+            "The safe login writes its question first, with blanks marked <b>?</b>.",
+            "Your text is sent separately and only fills a blank. It can never change the question.",
+            "This is called a <b>prepared statement</b>. It is the main defence.",
+          ],
+          demo: `<div style="font-size:16px;color:var(--ink-2)">Same text in both logins: <b style="color:var(--ink)">${esc(typedAttack)}</b></div><div class="out"></div>`,
+          async run(d) {
+            const out = d.querySelector(".out");
+            waiting(out);
+            try {
+              const [un, sf] = await Promise.all([post("l4u", "vulnerable", typedAttack, "x"), post("l4s", "safe", typedAttack, "x")]);
+              out.innerHTML =
+                card("unsafe", "Unsafe: pasted in", un.result.length, "leak", queryLine(un.query, [typedAttack, "x"])) +
+                card("safe", "Safe: sent separately", sf.result.length, "held", queryLine(sf.query, [], true) + valuesRow(sf.boundValues, "blanks filled with:")) +
+                `<div style="font-size:19px;line-height:1.5">Nobody is named <i>${esc(typedAttack)}</i>, so the safe login refuses.</div>`;
+              reveal(out);
+            } catch (e) { showErr(out, e); }
+          },
+        },
+        {
+          title: "Not just logins",
+          text: [
+            "Any box that ends up inside a question can be abused. A search box is a common one.",
+            "The unsafe search pastes your search text in. This text makes it list every user.",
+            "The safe search treats it as plain text to look for, and finds nothing.",
+          ],
+          demo: `<div class="row2"><label>Search for<input id="l5t" value="${esc(SEARCH_TERM)}" /></label><button class="btn" id="l5b" type="button">Search both</button></div><div class="out"></div>`,
+          async run(d) {
+            const out = d.querySelector(".out");
+            const term = d.querySelector("#l5t").value;
+            const b = d.querySelector("#l5b");
+            waiting(out);
+            busy(b, true);
+            try {
+              const r = await ask("l5", "/api/search-demo?term=" + encodeURIComponent(term));
+              out.innerHTML =
+                card("unsafe", "Unsafe search", r.unsafe.length, r.unsafe.length ? "leak" : "held", queryLine(r.queries.unsafe, [term]) + usersGrid(r.unsafe)) +
+                card("safe", "Safe search", r.safe.length, "held", queryLine(r.queries.safe, [], true) + valuesRow(r.boundValues.safe) + usersGrid(r.safe));
+              reveal(out);
+            } catch (e) { showErr(out, e); }
+            busy(b, false);
+          },
+          wire(d) { d.querySelector("#l5b").addEventListener("click", () => this.run(d)); },
+        },
+        {
+          title: "What to remember",
+          text: ["Five habits keep this from happening."],
+          demo: `<ol class="recap">
+            <li><b>Use placeholders.</b>Write the question with ? and send values separately.</li>
+            <li><b>Check what comes in.</b>Reject input that is missing or the wrong shape before it reaches the database.</li>
+            <li><b>Give the app only the access it needs.</b>A login does not need to delete tables.</li>
+            <li><b>Return only what is needed.</b>Send back the columns the page shows, nothing more.</li>
+            <li><b>Test with attacks.</b>Try known attack text before every release, as this tool does.</li></ol>`,
+        },
+      ];
+
+      LESSONS.forEach((L, i) => {
+        const sec = document.querySelector(`[data-screen="learn/${i + 1}"]`);
+        const back = i ? `<a href="#/learn/${i}">← Back</a>` : "";
+        const next = i < 5 ? `<a class="next" href="#/learn/${i + 2}">Next →</a>` : `<a class="next" href="#/lab/login">Open the Lab →</a>`;
+        sec.innerHTML =
+          `<div class="explain"><h1 tabindex="-1">${L.title}</h1>${L.text.map((t) => `<p>${t}</p>`).join("")}<div class="explain__nav">${back}${next}</div></div>` +
+          `<div class="demo">${L.demo}</div>`;
+        L.wire?.(sec.querySelector(".demo"));
+        L.el = sec;
+      });
+      const openLesson = () => {
+        const m = /^#\/learn\/(\d)$/.exec(location.hash);
+        const L = m && LESSONS[m[1] - 1];
+        L?.run?.(L.el.querySelector(".demo"));
+      };
+      window.addEventListener("hashchange", openLesson);
+      document.addEventListener("sqlshield:reset", openLesson);
+
+      /* ---------------- landing preview ---------------- */
+
+      async function openHome() {
+        if (!$("app").hasAttribute("data-home")) return;
+        const pair = [["hmU", "vulnerable", "hu"], ["hmS", "safe", "hs"]];
+        await Promise.all(pair.map(async ([id, mode, key]) => {
+          const out = $(id);
+          out.style.fontSize = "";
+          out.textContent = "Asking the database…";
+          out.classList.remove("leak");
+          try {
+            const r = await post(key, mode, typedAttack, "x");
+            out.textContent = `${r.result.length} user${r.result.length === 1 ? "" : "s"}`;
+            out.classList.toggle("leak", mode === "vulnerable" && r.result.length > 0);
+            reveal(out.parentNode);
+            if (mode === "safe") { const pn = out.parentNode; pn.classList.remove("pulse"); void pn.offsetWidth; pn.classList.add("pulse"); }
+          } catch (e) {
+            if (e.kind !== "superseded") { out.style.fontSize = "16px"; out.textContent = failOf(e).note(e); }
+          }
+        }));
+      }
+      window.addEventListener("hashchange", openHome);
+      document.addEventListener("sqlshield:reset", openHome);
+
+      /* ---------------- lab ---------------- */
+
+      const rowsList = (rows) =>
+        rows.length ? `<div class="lrows">${rows.map((r) => `<div><span>${esc(r.id ?? "")}</span><span>${esc(r.username ?? "")}</span></div>`).join("")}</div>` : "";
+      const nRows = (n) => `${n} row${n === 1 ? "" : "s"}`;
+      const labCard = (cls, title, n, body, verdict, bad) =>
+        `<div class="card ${cls}"><div class="card__head"><b>${title}</b><span class="cnt ${cls === "safe" ? "held" : verdict.startsWith("Leaked:") ? "leak" : ""}">${nRows(n)}</span></div>${body}<div class="verdict ${bad ? "bad" : ""}">${verdict}</div></div>`;
+      const labErr = (cls, title, err) =>
+        `<div class="card ${cls}"><div class="card__head"><b>${title}</b></div><div class="err">${esc(failOf(err).note(err))}</div><div class="verdict bad">${err.kind === "engine" ? "The database rejected this question." : esc(failOf(err).tally)}</div></div>`;
+      const labRun = async (btn, out, fn) => {
+        busy(btn, true);
+        out.innerHTML = '<div class="wait">Asking the database…</div>';
+        try { await fn(); } finally { busy(btn, false); }
+      };
+      const onEnter = (el, fn) => el.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); fn(); } });
+
+      /* login tester */
+      const lgU = $("lgU"), lgP = $("lgP"), lgX = $("lgX");
+      {
+        const saved = loadFields();
+        lgU.value = saved?.u ?? "' OR 1=1 --";
+        lgP.value = saved?.p ?? "x";
+      }
+      const lgSync = () => {
+        lgX.value = [...lgX.options].some((o) => o.value && o.value === lgU.value && lgP.value === (o.value === "alice" ? "pw123" : "x")) ? lgU.value : "";
+        lgU.classList.toggle("bad", /'/.test(lgU.value));
+      };
+      lgSync();
+      lgX.addEventListener("change", () => {
+        lgU.value = lgX.value;
+        lgP.value = lgX.value === "alice" ? "pw123" : "x";
+        lgSync();
+        saveFields({ u: lgU.value, p: lgP.value });
+      });
+      for (const el of [lgU, lgP]) el.addEventListener("input", () => { lgSync(); saveFields({ u: lgU.value, p: lgP.value }); });
+      async function runLoginLab() {
+        const u = lgU.value, p = lgP.value;
+        await labRun($("lgB"), $("lgOut"), async () => {
+          const [un, sf] = await Promise.allSettled([post("lgU", "vulnerable", u, p), post("lgS", "safe", u, p)]);
+          if ([un, sf].some((x) => x.status === "rejected" && x.reason.kind === "superseded")) return;
+          const sn = sf.status === "fulfilled" ? sf.value.result.length : 0;
+          const left = un.status === "fulfilled"
+            ? (() => {
+                const r = un.value, n = r.result.length, leak = n > 0 && sn === 0;
+                return labCard("unsafe", "Unsafe login", n, queryLine(r.query, [u, p]) + rowsList(r.result),
+                  leak ? "Leaked: your text changed the question." : n ? "Matched a real user." : "No user matched.", n > 0);
+              })()
+            : labErr("unsafe", "Unsafe login", un.reason);
+          const right = sf.status === "fulfilled"
+            ? labCard("safe", "Safe login", sn, queryLine(sf.value.query, [], true) + valuesRow(sf.value.boundValues) + rowsList(sf.value.result),
+                sn ? "Matched a real user." : "Held: your text stayed a value.")
+            : labErr("safe", "Safe login", sf.reason);
+          $("lgOut").innerHTML = `<div class="lab__pair">${left}${right}</div>`;
+          reveal($("lgOut"));
+        });
+      }
+      $("lgB").addEventListener("click", runLoginLab);
+      onEnter(lgU, runLoginLab);
+      onEnter(lgP, runLoginLab);
+
+      /* search tester */
+      $("seT").value = SEARCH_TERM;
+      async function runSearchLab() {
+        const t = $("seT").value;
+        await labRun($("seB"), $("seOut"), async () => {
+          try {
+            const r = await ask("seK", "/api/search-demo?term=" + encodeURIComponent(t));
+            const un = r.unsafe.length;
+            $("seOut").innerHTML = `<div class="lab__pair">` +
+              labCard("unsafe", "Unsafe search", un, queryLine(r.queries.unsafe, [t]) + rowsList(r.unsafe), un > r.safe.length ? "Leaked: your text changed the question." : un ? "Matched a real user." : "No user matched.", un > 0) +
+              labCard("safe", "Safe search", r.safe.length, queryLine(r.queries.safe, [], true) + valuesRow(r.boundValues.safe) + rowsList(r.safe), r.safe.length ? "Matched a real user." : "Held: your text stayed a value.") + `</div>`;
+            reveal($("seOut"));
+          } catch (e) { if (e.kind !== "superseded") $("seOut").innerHTML = `<div class="err">${esc(failOf(e).note(e))}</div>`; }
+        });
+      }
+      $("seB").addEventListener("click", runSearchLab);
+      onEnter($("seT"), runSearchLab);
+
+      /* sql sandbox */
+      const SQL_KEY = "sqlshield.script";
+      const sqS = $("sqS");
+      const sqExample = sqS.defaultValue;
+      try { const v = localStorage.getItem(SQL_KEY); if (v) sqS.value = v; } catch {}
+      sqS.addEventListener("input", () => { try { localStorage.setItem(SQL_KEY, sqS.value); } catch {} });
+      $("sqR").addEventListener("click", () => {
+        sqS.value = sqExample;
+        try { localStorage.removeItem(SQL_KEY); } catch {}
+        sqS.focus();
+      });
+      async function runSandbox() {
+        await labRun($("sqB"), $("sqOut"), async () => {
+          let html;
+          try {
+            const r = await ask("sqK", "/api/run-script", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ script: sqS.value }),
+            });
+            const rows = r.result || [], ch = r.changes || 0;
+            const cols = rows.length ? Object.keys(rows[0]) : [];
+            const shown = rows.slice(0, 50);
+            html = `<div class="card"><div class="card__head"><b>Result</b><span class="cnt held">${ch ? `Changed ${nRows(ch)}` : nRows(rows.length)}</span></div>` +
+              (cols.length ? `<div class="lab__table"><table class="utable"><thead><tr>${cols.map((c) => `<th>${esc(c)}</th>`).join("")}</tr></thead><tbody>${shown.map((x) => `<tr>${cols.map((c) => `<td>${esc(x[c] ?? "")}</td>`).join("")}</tr>`).join("")}</tbody></table></div>` : "") +
+              (rows.length > 50 ? `<div class="note">Showing the first 50 of ${rows.length} rows.</div>` : "") +
+              (r.ignored ? `<div class="note">Not run: ${esc(String(r.ignored).replace(/^;\s*/, ""))}</div>` : "") + `</div>`;
+          } catch (e) {
+            if (e.kind === "superseded") return;
+            html = `<div class="card"><div class="card__head"><b>Result</b></div><div class="err">${esc(e.kind === "offline" || e.kind === "timeout" ? failOf(e).note(e) : e.message)}</div></div>`;
+          }
+          $("sqOut").innerHTML = html;
+          reveal($("sqOut"));
+          checkHealth();
+        });
+      }
+      $("sqB").addEventListener("click", runSandbox);
+      sqS.addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); runSandbox(); } });
+
+      /* log: one aside, moved into whichever Lab screen is showing */
+      const logEl = $("log"), logList = $("logList");
+      let logLast = 0, logEntries = [], logBusy = false;
+      const inLab = () => /^#\/lab\//.test(location.hash);
+      const short = (t) => (t.length > 60 ? t.slice(0, 60) + "…" : t);
+      function logDraw(fresh = 0) {
+        logList.innerHTML = logEntries.length
+          ? logEntries.map((e, i) => {
+              const word = e.route === "reset" ? "reset" : e.outcome === "refused" ? "refused" : e.path === "bound" ? "safe" : e.path === "pasted" ? "unsafe" : e.outcome;
+              const rows = typeof e.rows === "number" ? ` · ${nRows(e.rows)}` : "";
+              const sql = e.sql || e.note || "";
+              return `<div class="log__e ${e.path || ""}${i < fresh ? " new" : ""}"><b>${esc(word)}</b>${rows} · ${esc(e.ms)} ms${sql ? "<br>" + esc(short(sql)) : ""}</div>`;
+            }).join("")
+          : '<div class="log__empty">Nothing yet. Run something and it shows up here.</div>';
+      }
+      async function logPoll() {
+        if (!inLab() || document.hidden || logBusy) return;
+        logBusy = true;
+        try {
+          const res = await fetch("/api/trace?after=" + logLast, { cache: "no-store" });
+          const d = await res.json();
+          if (!res.ok || !Array.isArray(d.entries)) throw new Error("bad");
+          $("logOff").hidden = true;
+          if (d.entries.length) {
+            logEntries = d.entries.slice().reverse().concat(logEntries).slice(0, 30);
+            logDraw(d.entries.length);
+          }
+          logLast = d.last;
+        } catch { $("logOff").hidden = false; }
+        logBusy = false;
+      }
+      $("logClear").addEventListener("click", () => { logEntries = []; logDraw(); });
+      function logPlace() {
+        const slot = document.querySelector('[data-screen^="lab/"]:not([hidden]) .lab__logslot');
+        logEl.hidden = !slot;
+        if (slot) { slot.append(logEl); logPoll(); }
+      }
+      window.addEventListener("hashchange", logPlace);
+      setInterval(logPoll, 1500);
+      logDraw();
+      logPlace();
+
+
+      route();
+      openLesson();
+      openHome();
+      logPlace();
+      checkHealth();
     </script>
   </body>
 </html>

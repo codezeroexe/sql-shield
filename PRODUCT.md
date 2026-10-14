@@ -24,7 +24,7 @@ The demo runs the **real vulnerable code path deliberately and shows it succeedi
 
 ## Operating Context
 
-Local-only. `node server.js`, then `http://localhost:3000`. The database lives in memory and is reseeded from a hardcoded list of four users on every boot and by `POST /api/reset`, so state is always fresh and there is no persistence to reason about. Nobody else ever reaches this instance — no accounts, no shared deploy, no concurrent operators.
+Local-only. `node server.js`, then `http://localhost:3000`. The database lives in memory and is reseeded from a hardcoded list of eight users on every boot and by `POST /api/reset`, so state is always fresh and there is no persistence to reason about. Nobody else ever reaches this instance — no accounts, no shared deploy, no concurrent operators.
 
 Consequence for design: harden for the single-operator failure modes that actually happen locally (backend not yet listening, database locked, a malformed response) rather than for cold-start, multi-user, or hostile-traffic robustness.
 
@@ -35,13 +35,13 @@ Consequence for design: harden for the single-operator failure modes that actual
 - `GET /api/search-demo?term=` — returns `{ safe, unsafe, queries, executed, ignored, boundValues, note }`. Same safe/unsafe split, both through `queryRows`, the vulnerable one with `LIKE '%term%'` interpolated.
 - `POST /api/run-script` with `{ script }` — runs the reviewer's own SQL statement verbatim on the live demo database and returns `{ label, status, result, note, query, executed, ignored, boundValues, changes, lastID }`. No binding, no escaping, no allow-list. The driver compiles one statement per call, so the tail after the first `;` is reported as never compiled. `changes` is reported only for statements the server could attribute to the request; a statement that only reads reports zero rather than a stale count.
 - Preset roll — one page action fires every payload preset through both paths in turn, each preset printing its own record pair. Composed entirely from `POST /api/login-demo`; no extra endpoint.
-- Four seeded users: `alice/pw123`, `bob/hunter2`, `admin/rootpass`, `charlie/letmein`.
+- Eight seeded users: `alice/pw123`, `bob/hunter2`, `admin/rootpass`, `charlie/letmein`, `dave/sunshine`, `erin/qwerty12`, `frank/dragon99`, `grace/iloveyou`.
 - Four payload presets: normal login, classic bypass (`' OR '1'='1 --`), admin bypass (`admin' --`), union select.
 
 Constraints:
 
 - **The frontend renders real API responses. Hard constraint.** Never a hardcoded mock, never a synthesized result. Every panel shows what the server actually returned.
-- **The unsafe path stays visible and honest. Hard constraint.** A bypass that returns four rows must be displayed as four rows with the unsafe status attached. Never softened, never retitled, never hidden behind a reassuring success message, never made to look safe.
+- **The unsafe path stays visible and honest. Hard constraint.** A bypass that returns eight rows must be displayed as eight rows with the unsafe status attached. Never softened, never retitled, never hidden behind a reassuring success message, never made to look safe.
 - No production authentication, no real credentials, no secrets. The vulnerable route is a teaching artifact and is only acceptable while it is labelled as one.
 - **The reviewer's own statement runs verbatim, and only locally.** The endpoint has no allow-list by user decision: the throwaway database holds no secrets and is reseeded on every boot, and refusing writes would hide the `DROP`/`ATTACH` lesson. The surface therefore carries a printed warning that the statement runs as typed and can write. Read-only enforcement is the change to make if this ever leaves a laptop. A narrow block-list now contains the failures that are not lessons: transaction-control and `VACUUM` statements are refused, runs stop after 6 seconds and at 500 rows, and `ATTACH` is refused by the engine so the attempt still prints as an engine refusal.
 - A statement the engine refused must print as a refusal: the sheet shows the statement it refused, the engine's own complaint, and the reason in words — never "no request sent yet" above an error.
@@ -57,7 +57,7 @@ No visual direction, palette, typeface, or style was pinned by the user. The pre
 ## Evidence on Hand
 
 - `server.js` — the authoritative API surface. The source of truth for response shapes, status codes, and the two query strategies.
-- The database is in memory by default (`DB_PATH` unset, `:memory:`), reseeded with four users on every start and by `POST /api/reset`. `DB_PATH` can point at a file to keep tables other than `users` between runs.
+- The database is in memory by default (`DB_PATH` unset, `:memory:`), reseeded with eight users on every start and by `POST /api/reset`. `DB_PATH` can point at a file to keep tables other than `users` between runs.
 - `test/api.test.js` and `test/page.test.js` — behaviour checks for the API and the page, run by `npm test`.
 - `public/index.html` — the entire existing frontend.
 - `README.md`, `plans.md` — project scope and intent.
