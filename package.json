@@ -4,7 +4,8 @@
   "description": "A lightweight web demo project for learning and demonstrating SQL injection mitigation techniques.",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node server.js",
+    "test": "node --test \"test/*.test.js\""
   },
   "repository": {
     "type": "git",
@@ -13,6 +14,9 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
+  "engines": {
+    "node": ">=20"
+  },
   "type": "commonjs",
   "bugs": {
     "url": "https://github.com/codezeroexe/sqlshield-demo/issues"
@@ -21,5 +25,8 @@
   "dependencies": {
     "express": "^5.2.1",
     "sqlite3": "^6.0.1"
+  },
+  "devDependencies": {
+    "jsdom": "^30.1.2"
   }
 }

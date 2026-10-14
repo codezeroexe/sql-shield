@@ -3,3 +3,15 @@ node_modules/
 *.sqlite
 .DS_Store
 npm-debug.log*
+
+# Keep these in the repo even when a global ignore hides everything
+!.github/
+!.github/**
+!test/
+!test/**
+!public/
+!public/**
+!DESIGN.md
+!PRODUCT.md
+!LEVELS.md
+!.env.example
