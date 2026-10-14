@@ -1,286 +1,214 @@
-# SQLShield Demo
+# SQLShield
 
-A lightweight web demo project for learning and demonstrating SQL injection mitigation techniques.
+A small web app that lets you attack a login and a search box with SQL injection, then shows why the same text fails against a prepared statement.
 
-[How it is built](ARCHITECTURE.md) · [What changed](CHANGELOG.md)
+> The "unsafe" routes are vulnerable on purpose. Run it on your own machine only. The database is a throwaway in-memory SQLite database that is rebuilt on every start.
 
-## Project goal
+More detail: [ARCHITECTURE.md](ARCHITECTURE.md) (how it is built), [CHANGELOG.md](CHANGELOG.md) (what changed), [PRODUCT.md](PRODUCT.md) (who it is for), [DESIGN.md](DESIGN.md) (look and feel).
 
-This project shows a clear side-by-side comparison between:
+## Quick start
 
-- unsafe SQL built by string concatenation
-- safe SQL executed with parameterized queries
+Requirements: Node.js 20 or newer (`engines` in `package.json`).
 
-The goal is to teach the mitigation skeleton in a simple, visual, and interactive format without building a large production application.
-
-## Why this project matters
-
-SQL injection happens when untrusted user input is concatenated into SQL statements. A safe pattern keeps user input as data values rather than executable SQL.
-
-## Core idea
-
-- unsafe pattern: `SELECT * FROM users WHERE username = '${username}' AND password = '${password}'`
-- safe pattern: `SELECT * FROM users WHERE username = ? AND password = ?`
-
-The demo highlights this difference and shows how parameterized queries block malicious payloads.
-
-## What to try
-
-Open the page at http://127.0.0.1:3000. On load it runs the classic bypass through both paths, so the proof is already printed when the page opens.
-
-- **Verdict row.** Shows `bound → N rows` for the safe path and `interpolated → N rows` for the vulnerable one. After load it reads 0 and 8. If the server is unreachable, both words show `offline`. **Re-run proof** arms the request slip with the classic bypass and runs both paths again.
-- **Request slip.** Username, Password and Payload preset fields, then two send buttons: **Test safe login** and **Test vulnerable login**. Pressing Enter in either field sends both. Empty fields are refused and marked. The preset menu has five entries: Normal login, Classic bypass, Admin bypass, Union payload and Broken statement. Choosing one fills the two fields. It sends nothing.
-- **Print all presets.** Runs every preset through both paths and prints one sheet per path for each, ten sheets in all.
-- **Search.** The term defaults to `a`. **Run comparison** runs the safe and unsafe search queries. With `a`, both return admin, alice, charlie, dave, frank and grace, so the unsafe record reads "no injection". With `' OR '1'='1`, the safe query returns no rows and the unsafe query returns all eight users, and the record reads "injected". With `a' UNION SELECT id, password FROM users --`, the unsafe query returns the stored passwords in the username column.
-- **Your own statement.** Type SQL and press Ctrl/⌘ + Enter or **Run statement**. The statement runs exactly as typed. Some examples:
-  - `SELECT * FROM users` returns all eight users with their passwords.
-  - `SELECT sql FROM sqlite_master WHERE name = 'users'` returns the table's `CREATE` statement.
-  - `UPDATE users SET password = 'x' WHERE username = 'alice'` reports one row changed. Then log in as alice with `x` on either path: it succeeds. With `pw123` on the safe path it returns no rows.
-  - `SELECT id, username FROM users; DROP TABLE users` returns the eight users. The record reports `DROP TABLE users` as discarded, and the table is still there.
-  - `DROP TABLE users` runs. A login after it fails with `engine error` and the message `no such table: users`. **Reset database** restores the eight users.
-
-Stamps on the records:
-
-- **safe**: the prepared path ran, and the input stayed a value.
-- **injected**: the input changed the SQL and the query ran. On search, this needs the unsafe query to return more rows than the safe one.
-- **ran**: your own statement ran. The page does not call this safe.
-- **refused**: the server rejected the request before any statement ran.
-- **engine error**: SQLite rejected the statement.
-- **timed out**: the statement was stopped, by the server after 6 seconds or by the page after 8.
-- **offline**: the page got no response from the server.
-- **not run**: nothing has been sent for that record yet.
-
-## Features
-
-- login demo with safe vs vulnerable logic
-- payload presets for common SQL injection attempts
-- search comparison showing safe and unsafe query behavior
-- mitigation checklist for defensive coding practices
-- simple SQLite-backed demo data, held in memory and reseeded on every start
-
-## Tech stack
-
-- Node.js
-- Express
-- SQLite3
-- HTML
-- CSS
-- JavaScript
-
-## Project structure
-
-```text
-.
-├── README.md                  this file
-├── ARCHITECTURE.md            how the demo is built
-├── CHANGELOG.md               what changed, by release
-├── PRODUCT.md                 purpose, audience and what the demo must show
-├── DESIGN.md                  visual and interaction design of the page
-├── LEVELS.md                  level ratings and open gaps
-├── plans.md                   original build plan (historical)
-├── need-to-fix.md             open backend and frontend fixes
-├── .env.example               the three configuration variables
-├── .gitignore
-├── .github/workflows/ci.yml   CI: npm ci, audit, npm test
-├── package.json               scripts, dependencies, Node version
-├── server.js                  Express server, SQLite database, API routes
-├── test/
-│   ├── api.test.js            API tests
-│   └── page.test.js           page tests in jsdom
-└── public/
-    ├── index.html             the whole frontend: markup, styles, script
-    ├── favicon.svg
-    └── fonts/                 bundled web font
 ```
-
-## Running the demo
-
-### Requirements
-
-- Node.js 20 or newer
-- npm
-
-### Start
-
-From the project folder:
-
-```bash
-npm ci
+npm install
 npm start
 ```
 
-Use `npm install` instead of `npm ci` if you changed `package.json`.
+Open http://127.0.0.1:3000 (the defaults are `HOST=127.0.0.1`, `PORT=3000`).
 
-Then open http://127.0.0.1:3000 (http://localhost:3000 also works). While the tab is visible, the page checks the server every 10 seconds. If the server stops, the status lamp reads "backend unreachable".
-
-### Configuration
-
-The server reads three environment variables. Set them on the command line, for example `PORT=8080 npm start`. `.env.example` lists them. The server does not read a `.env` file itself.
-
-| Variable | Default | Meaning |
-| --- | --- | --- |
-| `PORT` | `3000` | Port to listen on. Use a whole number from 0 to 65535. |
-| `HOST` | `127.0.0.1` | Address to bind: an IP address or `localhost`. `HOST=0.0.0.0` exposes the arbitrary-SQL endpoint to the whole network. Do not use it on a network you do not control. |
-| `DB_PATH` | `:memory:` | Database location. `:memory:` is reseeded on every start. A file path keeps tables other than `users` between runs. The folder must already exist. |
-
-A bad value stops the server at start with a message that names the variable: `Invalid PORT`, `Invalid HOST` or `Invalid DB_PATH`. If the port is already in use, it stops with `Port N is already in use` and tells you to pick a free `PORT`.
-
-### Stop
-
-Press Ctrl-C in the terminal. The server closes its connections and the database, then exits. It handles both SIGINT and SIGTERM this way. If closing takes longer than 3 seconds, it exits anyway.
-
-### Reset between runs
-
-Press "Reset database" on the page, or run:
-
-```bash
-curl -X POST http://127.0.0.1:3000/api/reset
+```
+npm test        # 78 tests, about 11 seconds
+npm run load    # load test, about 10 seconds
 ```
 
-A reset drops every table, view, trigger and index, including anything created through the statement box, and restores the eight users. Restarting the server also reseeds the users.
+To use another port: `PORT=3100 npm start`.
 
-### If the server died
+## Using it
 
-Restart it with `npm start`. With the default in-memory database, the earlier data is gone and the eight users are reseeded, and nothing else is lost. With a `DB_PATH` file, the users are reseeded and the other tables in the file stay as they were.
+### Landing page
 
-### Pre-demo checklist
+`#/` shows the headline, two buttons (**Start the lessons**, **Open the Lab**) and a live preview. The preview sends `' OR 1=1 --` with password `x` to both logins and shows how many users each one returned. With a fresh database that is 8 for the unsafe login and 0 for the safe one.
 
-- [ ] Run `npm test` and confirm all tests pass.
-- [ ] Start the server with `npm start` and open http://127.0.0.1:3000.
-- [ ] Confirm the status lamp reads "backend online" and the verdict reads "bound → 0 rows, interpolated → 8 rows".
-- [ ] Press "Reset database".
-- [ ] Check the projector at 1280×720.
-- [ ] Bring a charged laptop and keep it on power.
-- [ ] Close other tabs that point at the demo.
-- [ ] Keep a terminal visible so you can restart with `npm start`.
-- [ ] Do not set `HOST=0.0.0.0` on a shared network.
+### The six lessons
 
-## Backend contract
+Each lesson is a short page with a live example. Back and Next links sit at the bottom; the last lesson links to the Lab.
 
-The authoritative API surface is `server.js`. The full route list is under [API contract](#api-contract) below:
+1. **How a login works.** The site asks the database for the user with this name and password.
+2. **The trick.** The unsafe login pastes your text into the question, so quotes and extra words become part of it.
+3. **Why it worked.** Which parts of the typed text change the question.
+4. **The fix.** The safe login writes the question with `?` blanks and sends your text separately.
+5. **Not just logins.** The same problem in a search box.
+6. **What to remember.** Five habits that prevent it.
 
-- `GET /api/health`
-- `POST /api/login-demo` — `{ mode: "safe" | "vulnerable", username, password }`
-- `GET /api/search-demo?term=`
-- `POST /api/run-script` — `{ script }`, runs the reviewer's own SQL verbatim
-- `POST /api/reset` — restores the demo state
+### The Lab
 
-`/api/run-script` executes exactly what it is given against the in-memory demo database: no binding, no escaping, no allow-list. A small block-list refuses transaction-control statements and `VACUUM` (see [Limits on the statement box](#limits-on-the-statement-box)). The driver compiles one statement per call, so anything after the first `;` that is outside quotes and comments is reported back as never compiled rather than quietly run. Only use it locally.
+Three tools. Each one sends real requests to the server.
 
-The frontend lives entirely in `public/index.html` as a single static page.
+- **Login tester** (`#/lab/login`). Name and password fields plus an example menu (Normal login, Log in as everyone, Log in as admin, Read other columns, Broken text). **Run both** sends the text to the safe and the unsafe login and shows both results.
+- **Search tester** (`#/lab/search`). One search box. **Search both** runs the safe and the unsafe search with the same text.
+- **SQL sandbox** (`#/lab/sandbox`). A text area that runs exactly what you type against the demo database. It can read and change data. Only the first statement runs; anything after the first `;` is ignored. **Restore example** puts the starting text back. The text you type is kept in the browser's local storage.
 
-## API contract
+Under each tool, **What the database ran** lists the last 30 statements the server executed: which route, bound (prepared) or pasted, the SQL, the bound values, row count and timing. It polls `/api/trace` every 1.5 seconds while a Lab screen is open. **Clear** empties the list on the page only. If the server stops answering it shows "Log paused: server not reachable."
 
-All request and response bodies are JSON. Strings in the login and search inputs are limited to 200 characters. The script limit is 10000 characters. Request bodies are capped at 100 KB.
+### Reset database
 
-Status codes used across the API:
+The left rail shows the current user count and a **Reset database** button. It calls `POST /api/reset`: every table, view, trigger and index is dropped and the 8 users are restored. Use it after the sandbox changes or deletes data.
 
-| Code | Meaning |
-| --- | --- |
-| 200 | The request was handled. For login and search, a bypass that returns rows is still 200, with `status: "unsafe"` in the body. |
-| 400 | Refused before the statement reached the database: missing or invalid input, an invalid `mode`, a blocked statement, or malformed JSON. |
-| 404 | No such route under `/api`. |
-| 413 | The request body is larger than 100 KB. |
-| 500 | The engine refused the statement, or the server hit an unexpected error. |
-| 503 | The database cannot answer. Only `/api/health` returns this. |
-| 504 | The statement was stopped by the 6-second limit. |
+### Banner
 
-Most errors have the shape `{ "error": "<message>" }`. On `login-demo` and `run-script`, a statement that reached the database returns the record shape even when it fails with 500 or 504, so the page can show what was attempted. Those records carry `status: "rejected"` or `"unsafe"` and a `note` that holds the message.
+A banner appears at the top when the page checks `/api/health` (on load, every 10 seconds while the tab is visible, and when the tab becomes visible again) and finds a problem:
 
-### `GET /api/health`
+- Server unreachable: "The demo server is not running. Start it with npm start, then reload this page."
+- `db` is `damaged`: "The users table was deleted. Reset the demo to bring it back." This one has a **Reset database** button.
 
-No input.
+When the database is intact the banner is hidden.
 
-- 200: `{ "ok": true, "message": "SQLShield Demo backend is running." }`
-- 503: `{ "ok": false, "message": "database unavailable." }`, when `SELECT 1` fails.
+### Keyboard
 
-### `POST /api/reset`
+- Left and Right arrow keys move between lessons 1 to 6. Ignored while typing in a field, and with Ctrl, Alt, Meta or Shift held.
+- Enter in the Login tester name or password field, or in the Search tester field, runs the tool.
+- Ctrl+Enter or Cmd+Enter in the SQL sandbox runs the statement (plain Enter adds a new line).
 
-No input. Drops every table, view, trigger and index in the database, including any created through `run-script`, then reseeds the eight users (`alice`, `bob`, `admin`, `charlie`, `dave`, `erin`, `frank`, `grace`).
+## How it works
 
-- 200: `{ "ok": true, "users": 8, "message": "Database reset. 8 users restored." }`
-- 500: `{ "error": "reset failed: <message>" }`
+The server builds each query two ways. The text below comes from `server.js`.
 
-### `POST /api/login-demo`
+Unsafe (login), the input is pasted into the SQL string:
 
-Body: `mode` (`"safe"` by default, or `"vulnerable"`), `username`, `password`. Both credentials are required and must be strings of 200 characters or fewer.
-
-- 200, `mode: "safe"`: `{ label, status: "safe", result, note, query, boundValues }`. `result` holds at most one row. The query is a prepared statement and `boundValues` shows the two values as sent.
-- 200, `mode: "vulnerable"`: `{ label, status: "unsafe", result, note, query, executed, ignored, boundValues: null }`. `executed` is the part of the string the driver compiled, and `ignored` is anything after the first `;` that it discarded. `truncated: true` appears when the row cap was hit.
-- 400: missing or empty credentials, non-string credentials, a credential over 200 characters, or a `mode` that is neither `"safe"` nor `"vulnerable"`. Body: `{ "error": "<message>" }`.
-- 500: the engine refused the statement. The record is returned with `status` set to `"unsafe"` or `"safe"` and `note` holding the engine message.
-- 504: the vulnerable statement hit the 6-second limit. The record has `status: "rejected"`, `result: []`, and `timedOut: true`.
-
-### `GET /api/search-demo?term=`
-
-Query: `term`, one string of 200 characters or fewer. An absent or empty term is not an error.
-
-- 200, no term: `{ safe: [], unsafe: [], boundValues: { safe: null, unsafe: null }, note: "No term provided." }`.
-- 200, with a term: `{ safe, unsafe, queries: { safe, unsafe }, executed: { safe, unsafe }, ignored: { safe, unsafe }, boundValues: { safe: ["%<term>%"], unsafe: null }, note }`. `ignored.safe` is always empty. `truncated: { safe, unsafe }` appears when either side hit the row cap.
-- 400: `term` is not a single string, or is over 200 characters. Body: `{ "error": "<message>" }`.
-- 500: an engine error on either query. Body: `{ "error": "<message>" }`.
-- 504: either query hit the 6-second limit. Body: `{ "error": "<message>", "timedOut": true }`.
-
-### `POST /api/run-script`
-
-Body: `script`, a non-blank string of 10000 characters or fewer.
-
-- 200: `{ label: "custom", status: "ran", result, note, query, executed, ignored, boundValues: null, changes, lastID }`. `query` is the script as sent. `changes` and `lastID` report on writes only. A statement that only reads reports `changes: 0` and `lastID: null`. `truncated: true` appears when the row cap was hit.
-- 400: the script is missing, blank or not a string; it is over 10000 characters; nothing comes before the first `;`; or it opens with a blocked keyword. Body: `{ "error": "<message>" }`.
-- 500: the engine refused the statement. The record has `status: "rejected"` and `note` holds the engine message. `ATTACH` lands here. See the limits below.
-- 504: the statement hit the 6-second limit. The record has `status: "rejected"`, `result: []`, and `timedOut: true`.
-
-The `changes` count is the difference in SQLite's total change counter around the statement, so DDL reports 0; writes made by triggers a script created are counted too.
-
-### Errors from the framework
-
-- 400 `{ "error": "request body must be valid JSON." }` for malformed JSON.
-- 413 `{ "error": "request body is too large." }` for a body over 100 KB.
-- 404 `{ "error": "no such route." }` for an unknown path under `/api`.
-- 500 `{ "error": "internal error." }` for anything unexpected. Stack traces are logged on the server, never sent.
-
-## Limits on the statement box
-
-The statement box is `POST /api/run-script`. These limits apply to it. The unsafe login and search queries share the 6-second and 500-row limits.
-
-- Each statement stops after 6 seconds. It is interrupted, the response is 504, and `timedOut: true` is set. No rows come back.
-- At most 500 rows are returned. The rest are not fetched. The response sets `truncated: true` and the note says so.
-- `BEGIN`, `COMMIT`, `END`, `ROLLBACK`, `SAVEPOINT`, `RELEASE` and `VACUUM` are blocked with 400 when they open the first statement. Leading whitespace and comments are skipped before the check. These statements would break the server's wrapper transaction or write files.
-- `ATTACH` is refused by the engine. The server sets the attached-database limit to zero, so the statement fails with a 500 and SQLite's own message.
-- One script runs at a time. Others wait their turn on the single shared connection.
-
-## Tests
-
-`npm test` runs `node --test "test/*.test.js"` from the project root. It takes about 10 seconds, and most of that is one page test that waits 8 seconds for the page's own request timeout.
-
-- `test/api.test.js` (48 tests) covers the API: login and search on both paths, the statement box and its limits, reset, health, input refusals, response headers, and the start-up checks for `PORT`, `HOST` and `DB_PATH`. It starts its own server on a random port from 3900 to 3989 and stops it afterwards.
-- `test/page.test.js` (12 tests) loads the real `public/index.html` in jsdom against its own server on a random port from 3990 to 4089. It covers the load-time proof, form validation, preset arming, the statement box, reset, and the offline, timed out and engine error stamps.
-
-`jsdom` is a dev dependency, installed by `npm ci`.
-
-To run the tests against a server you already started, for example with `npm start` in another terminal:
-
-```bash
-BASE=http://127.0.0.1:3000 node --test test/api.test.js
-PAGE_BASE=http://127.0.0.1:3000 node --test test/page.test.js
+```
+SELECT id, username FROM users WHERE username = '${username}' AND password = '${password}'
 ```
 
-The tests call `POST /api/reset` to get a clean database, so running them against a server you are presenting from resets its data as well.
+Safe (login), the SQL is fixed and the values travel separately:
 
-### Load test
-
-```bash
-npm run load
+```
+SELECT id, username FROM users WHERE username = ? AND password = ?
 ```
 
-`scripts/load.js` starts its own server on a free port and runs 20 concurrent clients for 10 seconds. Each client loops over bound login, pasted login (`' OR 1=1 --`) and search. It prints the request count, errors, requests per second and p50, p95 and max latency, then `PASS` or `FAIL`. The budget is p95 under 50 ms and no errors. This is far above what one presenter and an instructor need on localhost.
+with `[username, password]` as the bound values. Search works the same way:
 
-## Security focus
+```
+unsafe: SELECT id, username FROM users WHERE username LIKE '%${term}%' ORDER BY username
+safe:   SELECT id, username FROM users WHERE username LIKE ? ORDER BY username      (value: "%term%")
+```
 
-This project emphasizes:
+Why the safe one holds: SQLite compiles the statement with the `?` blanks before it sees your text. The text is then attached as a value, so a quote or `OR 1=1` in it is just characters to compare against, never part of the query.
 
-- prepared statements
-- input validation
-- least privilege access
-- safe database query construction
-- demonstration of common injection payloads
+Notes from the code:
+
+- The SQLite driver compiles one statement per call. Everything after the first `;` that is not inside a quote, comment or `[identifier]` is discarded. The responses return `executed` and `ignored` so the page can show what really ran.
+- Typing `' OR 1=1 --` as the unsafe login name returns all 8 users, because the pasted text turns the WHERE clause into something always true.
+
+## Configuration
+
+Read by `server.js` at start. A bad value stops the process with a message.
+
+| Variable | Default | What it does |
+|---|---|---|
+| `PORT` | `3000` | Port to listen on. Whole number 0 to 65535. Port 0 picks a free port (the console line then shows 0, not the real port). |
+| `HOST` | `127.0.0.1` | Address to bind. Must be an IP address or `localhost`. |
+| `DB_PATH` | `:memory:` | SQLite database. The default is in memory and reseeded every start. A file path keeps the file, but the users table is still emptied and reseeded on every start. The folder must exist. |
+
+Fixed values in the code (not configurable): 500 rows per result, 6 second statement timeout, 200 characters for login fields and search term, 10000 characters for a script, 100 kB request body, 50 trace entries.
+
+While `HOST` is a loopback address (`127.0.0.1`, `localhost`, `::1`), requests with any other `Host` header get `403 {"error":"unexpected Host header."}` (a defence against DNS rebinding).
+
+## API reference
+
+All routes return JSON. Errors have the shape `{"error": "message"}`. Bad JSON gives `400 {"error":"request body must be valid JSON."}`; a body over 100 kB gives `413`. Unknown `/api/...` paths give `404 {"error":"no such route."}`. Any other path serves the page.
+
+### GET /api/health
+
+- `200 {"ok":true,"db":"intact","users":8,"message":"SQLShield Demo backend is running."}`
+- `200 {"ok":true,"db":"damaged","users":0,"message":"users table missing."}` when the users table is gone.
+- `503 {"ok":false,"message":"database unavailable."}` when the connection fails.
+
+### POST /api/reset
+
+No body. Drops all objects, reseeds 8 users. `200 {"ok":true,"users":8,"message":"Database reset. 8 users restored."}`, or `500 {"error":"reset failed: ..."}`.
+
+### POST /api/login-demo
+
+Body: `{"mode":"safe"|"vulnerable","username":"...","password":"..."}`. `mode` defaults to `safe`.
+
+- `200` response: `{label, status, result, note, query, boundValues, ...}`. `label` is `safe` or `vulnerable`; `status` is `safe` or `unsafe`; `result` is an array of `{id, username}` rows (safe: zero or one row). Vulnerable also returns `executed`, `ignored`, and `truncated: true` if cut at 500 rows. Safe returns `boundValues: [username, password]`; vulnerable returns `boundValues: null`.
+- `400`: missing or empty username or password; not strings; over 200 characters; `mode` not `safe` or `vulnerable`.
+- `500`: engine error (for example a broken statement); `status` is `unsafe` (vulnerable) or `safe`, `note` holds the engine message.
+- `504`: vulnerable statement ran past 6 seconds; `timedOut: true`, `status: "rejected"`.
+
+### GET /api/search-demo?term=...
+
+- `200`: `{safe, unsafe, queries:{safe,unsafe}, executed:{safe,unsafe}, ignored:{safe,unsafe}, boundValues:{safe:["%term%"],unsafe:null}, note}`, plus `truncated:{safe,unsafe}` if either was cut at 500 rows. `safe` and `unsafe` are arrays of `{id, username}`.
+- Empty or missing `term`: `200 {safe:[], unsafe:[], boundValues:{safe:null,unsafe:null}, note:"No term provided."}`.
+- `400`: `term` repeated (not a single string) or over 200 characters.
+- `500`: engine error from either query. `504`: either query ran past 6 seconds, `{error, timedOut:true}`.
+
+### POST /api/run-script
+
+Body: `{"script":"..."}`. Runs the text exactly as typed, one script at a time (a queue).
+
+- `200`: `{label:"custom", status:"ran", result, note, query, executed, ignored, boundValues:null, changes, lastID}`. `changes` is the number of rows written (0 for reads and DDL). `lastID` is null unless rows changed. `truncated: true` if cut at 500 rows.
+- `400` refusals: script missing, not a string, or blank; over 10000 characters; nothing before the first `;`; first statement starts with `BEGIN`, `COMMIT`, `END`, `ROLLBACK`, `SAVEPOINT`, `RELEASE` or `VACUUM` (leading whitespace and comments are skipped before the check).
+- `500`: engine error, `status:"rejected"`, message in `note`. `ATTACH` fails this way (the attached-database limit is 0, so a script cannot create files).
+- `504`: ran past 6 seconds, `timedOut: true`; the statement is interrupted and the server stays up.
+
+### GET /api/trace?after=N
+
+Returns `{"entries":[...],"last":N}`. `after` is optional, a whole number; entries with `id` greater than it are returned. `last` is the newest id. The server keeps the last 50. `400 {"error":"after must be a whole number."}` for anything else.
+
+Each entry: `id`, `at` (ms since epoch), `route` (`login`, `search`, `script`, `reset`), `ms`, `http` (status), `outcome` (`ok`, `refused` for 400, `timeout`, `error`), `path` (`bound`, `pasted` or null), `sql`, `bound` (bound values or null), `rows` (count or null), `note`. Script entries also have `changes`. A search adds two entries, one `bound` and one `pasted`. Only login, search, run-script and reset are recorded; health and trace are not.
+
+## Project layout
+
+```
+server.js              Express app, SQLite, all routes, config checks
+public/index.html      the whole page: markup, styles, script (no build step)
+public/favicon.svg     shield icon
+public/fonts/          Azeret Mono, served locally
+test/api.test.js       backend tests (spawns the server)
+test/page.test.js      page tests (jsdom against a running server)
+scripts/load.js        load test, run with npm run load
+.github/workflows/ci.yml   CI
+ARCHITECTURE.md        how it is built, decisions, change checklist
+CHANGELOG.md           what changed
+PRODUCT.md, DESIGN.md  audience and visual rules
+LEVELS.md              audit notes and open findings
+```
+
+## Tests and checks
+
+Run `npm test` (Node's built-in runner, `node --test "test/*.test.js"`). Last run: 78 pass, 0 fail, about 11 seconds.
+
+- `test/api.test.js`: login (safe, bypass, stacked statements, validation), search, health (intact and damaged), run-script (reads, writes, change counts, refusals, 10000-character limit, 500-row cap, 6 second timeout), reset, concurrent scripts, JSON and 404 errors, security headers, Host header refusals, start-up failures for bad `PORT`, `HOST`, `DB_PATH` and a busy port, and the trace.
+- `test/page.test.js`: routes and rail, landing counts, arrow keys, banner states, reset button, the three Lab tools, and log polling only on Lab screens.
+
+`npm run load` starts its own server on a free port, sends login (safe and unsafe) and search requests from 20 workers for 10 seconds, then stops it. Budget: p95 latency under 50 ms and zero errors; it exits 1 if missed. A sample run: about 122,000 requests, 0 errors, p95 3.1 ms.
+
+CI (`.github/workflows/ci.yml`) runs on every push and pull request with Node 20: `npm ci`, `npm audit --omit=dev --audit-level=high`, `npm test`. The load test is not part of CI.
+
+## Seeded demo users
+
+Created at every start and on reset. Passwords are plain text on purpose.
+
+| id | username | password |
+|---|---|---|
+| 1 | alice | pw123 |
+| 2 | bob | hunter2 |
+| 3 | admin | rootpass |
+| 4 | charlie | letmein |
+| 5 | dave | sunshine |
+| 6 | erin | qwerty12 |
+| 7 | frank | dragon99 |
+| 8 | grace | iloveyou |
+
+## Limits and known issues
+
+- The unsafe login, unsafe search and SQL sandbox are intentionally exploitable, and `/api/run-script` runs arbitrary SQL. Do not expose it beyond your own machine. Binding to a non-loopback `HOST` turns off the Host header check.
+- The server uses one SQLite connection. Scripts run one at a time; a statement that runs past 6 seconds is interrupted.
+- Results are capped at 500 rows.
+- Only the first statement of any pasted query runs, so stacked-statement attacks like `; DROP TABLE users` are discarded by the driver in login and search. The sandbox can still run a single `DROP TABLE users` directly; reset fixes it.
+- `BEGIN`, `COMMIT`, `END`, `ROLLBACK`, `SAVEPOINT`, `RELEASE`, `VACUUM` and `ATTACH` do not work in the sandbox.
+- The change count counts rows changed by triggers too, if a script creates a trigger (LEVELS.md, B-T1).
+- With `DB_PATH` set to a file, only the `users` table is reseeded; other objects in the file stay until a reset.
+- The trace and its log are in memory, one process, last 50 entries; the page shows the last 30.
