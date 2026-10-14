@@ -31,9 +31,9 @@ Consequence for design: harden for the single-operator failure modes that actual
 ## Capabilities and Constraints
 
 - `GET /api/health` — backend liveness, drives the status pill.
-- `POST /api/login-demo` with `{ mode: "safe" | "vulnerable", username, password }` — returns `{ label, status, result, note, query, boundValues }`. The safe branch uses `db.get` with bound values; the vulnerable branch uses `db.all` on a string-interpolated query. Rejects empty credentials with HTTP 400.
-- `GET /api/search-demo?term=` — returns `{ safe, unsafe, queries, boundValues, note }`. Same safe/unsafe split, both with `db.all`, the vulnerable one with `LIKE '%term%'` interpolated.
-- `POST /api/run-script` with `{ script }` — runs the reviewer's own SQL statement verbatim on the live demo database and returns `{ label, status, result, note, query, executed, ignored, boundValues, changes, lastID }`. No binding, no escaping, no allow-list. `db.all` compiles one statement per call, so the tail after the first `;` is reported as never compiled. `changes` is reported only for statements the server could attribute to the request; a statement that only reads reports zero rather than a stale count.
+- `POST /api/login-demo` with `{ mode: "safe" | "vulnerable", username, password }` — returns `{ label, status, result, note, query, boundValues }`, plus `executed` and `ignored` on the vulnerable branch. The safe branch uses `db.get` with bound values; the vulnerable branch runs a string-interpolated query through `queryRows`, a wrapper over `db.each` that adds the 6 second limit and 500-row cap (the page labels it `db.all`, the call it teaches about). Rejects missing, non-string or over-long credentials and an unknown `mode` with HTTP 400.
+- `GET /api/search-demo?term=` — returns `{ safe, unsafe, queries, executed, ignored, boundValues, note }`. Same safe/unsafe split, both through `queryRows`, the vulnerable one with `LIKE '%term%'` interpolated.
+- `POST /api/run-script` with `{ script }` — runs the reviewer's own SQL statement verbatim on the live demo database and returns `{ label, status, result, note, query, executed, ignored, boundValues, changes, lastID }`. No binding, no escaping, no allow-list. The driver compiles one statement per call, so the tail after the first `;` is reported as never compiled. `changes` is reported only for statements the server could attribute to the request; a statement that only reads reports zero rather than a stale count.
 - Preset roll — one page action fires every payload preset through both paths in turn, each preset printing its own record pair. Composed entirely from `POST /api/login-demo`; no extra endpoint.
 - Four seeded users: `alice/pw123`, `bob/hunter2`, `admin/rootpass`, `charlie/letmein`.
 - Four payload presets: normal login, classic bypass (`' OR '1'='1 --`), admin bypass (`admin' --`), union select.
@@ -57,7 +57,8 @@ No visual direction, palette, typeface, or style was pinned by the user. The pre
 ## Evidence on Hand
 
 - `server.js` — the authoritative API surface. The source of truth for response shapes, status codes, and the two query strategies.
-- `database.sqlite` — real seeded data; not a fixture in the repo but generated on boot.
+- The database is in memory by default (`DB_PATH` unset, `:memory:`), reseeded with four users on every start and by `POST /api/reset`. `DB_PATH` can point at a file to keep tables other than `users` between runs.
+- `test/api.test.js` and `test/page.test.js` — behaviour checks for the API and the page, run by `npm test`.
 - `public/index.html` — the entire existing frontend.
 - `README.md`, `plans.md` — project scope and intent.
 

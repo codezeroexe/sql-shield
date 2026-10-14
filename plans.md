@@ -1,5 +1,7 @@
 # Project plan
 
+> Historical: the original build plan. Current behaviour is described in README.md and ARCHITECTURE.md.
+
 ## 1. Project objective
 
 Build a small web demo that teaches SQL injection mitigation by contrasting unsafe SQL construction with prepared statements.

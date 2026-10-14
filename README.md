@@ -2,6 +2,8 @@
 
 A lightweight web demo project for learning and demonstrating SQL injection mitigation techniques.
 
+[How it is built](ARCHITECTURE.md) · [What changed](CHANGELOG.md)
+
 ## Project goal
 
 This project shows a clear side-by-side comparison between:
@@ -21,6 +23,32 @@ SQL injection happens when untrusted user input is concatenated into SQL stateme
 - safe pattern: `SELECT * FROM users WHERE username = ? AND password = ?`
 
 The demo highlights this difference and shows how parameterized queries block malicious payloads.
+
+## What to try
+
+Open the page at http://127.0.0.1:3000. On load it runs the classic bypass through both paths, so the proof is already printed when the page opens.
+
+- **Verdict row.** Shows `bound → N rows` for the safe path and `interpolated → N rows` for the vulnerable one. After load it reads 0 and 4. If the server is unreachable, both words show `offline`. **Re-run proof** arms the request slip with the classic bypass and runs both paths again.
+- **Request slip.** Username, Password and Payload preset fields, then two send buttons: **Test safe login** and **Test vulnerable login**. Pressing Enter in either field sends both. Empty fields are refused and marked. The preset menu has five entries: Normal login, Classic bypass, Admin bypass, Union payload and Broken statement. Choosing one fills the two fields. It sends nothing.
+- **Print all presets.** Runs every preset through both paths and prints one sheet per path for each, ten sheets in all.
+- **Search.** The term defaults to `a`. **Run comparison** runs the safe and unsafe search queries. With `a`, both return admin, alice and charlie, so the unsafe record reads "no injection". With `' OR '1'='1`, the safe query returns no rows and the unsafe query returns all four users, and the record reads "injected". With `a' UNION SELECT id, password FROM users --`, the unsafe query returns the stored passwords in the username column.
+- **Your own statement.** Type SQL and press Ctrl/⌘ + Enter or **Run statement**. The statement runs exactly as typed. Some examples:
+  - `SELECT * FROM users` returns all four users with their passwords.
+  - `SELECT sql FROM sqlite_master WHERE name = 'users'` returns the table's `CREATE` statement.
+  - `UPDATE users SET password = 'x' WHERE username = 'alice'` reports one row changed. Then log in as alice with `x` on either path: it succeeds. With `pw123` on the safe path it returns no rows.
+  - `SELECT id, username FROM users; DROP TABLE users` returns the four users. The record reports `DROP TABLE users` as discarded, and the table is still there.
+  - `DROP TABLE users` runs. A login after it fails with `engine error` and the message `no such table: users`. **Reset database** restores the four users.
+
+Stamps on the records:
+
+- **safe**: the prepared path ran, and the input stayed a value.
+- **injected**: the input changed the SQL and the query ran. On search, this needs the unsafe query to return more rows than the safe one.
+- **ran**: your own statement ran. The page does not call this safe.
+- **refused**: the server rejected the request before any statement ran.
+- **engine error**: SQLite rejected the statement.
+- **timed out**: the statement was stopped, by the server after 6 seconds or by the page after 8.
+- **offline**: the page got no response from the server.
+- **not run**: nothing has been sent for that record yet.
 
 ## Features
 
@@ -43,35 +71,27 @@ The demo highlights this difference and shows how parameterized queries block ma
 
 ```text
 .
-├── README.md
-├── plans.md
-├── package.json
-├── server.js
+├── README.md                  this file
+├── ARCHITECTURE.md            how the demo is built
+├── CHANGELOG.md               what changed, by release
+├── PRODUCT.md                 purpose, audience and what the demo must show
+├── DESIGN.md                  visual and interaction design of the page
+├── LEVELS.md                  level ratings and open gaps
+├── plans.md                   original build plan (historical)
+├── need-to-fix.md             open backend and frontend fixes
+├── .env.example               the three configuration variables
+├── .gitignore
+├── .github/workflows/ci.yml   CI: npm ci, audit, npm test
+├── package.json               scripts, dependencies, Node version
+├── server.js                  Express server, SQLite database, API routes
 ├── test/
-│   └── api.test.js
-├── public/
-│   └── index.html
-└── .gitignore
+│   ├── api.test.js            API tests
+│   └── page.test.js           page tests in jsdom
+└── public/
+    ├── index.html             the whole frontend: markup, styles, script
+    ├── favicon.svg
+    └── fonts/                 bundled web font
 ```
-
-## Run locally
-
-```bash
-npm install
-npm start
-```
-
-Then open:
-
-```text
-http://localhost:3000
-```
-
-The server reads three environment variables:
-
-- `PORT` sets the port. Default `3000`.
-- `HOST` sets the address to listen on. Default `127.0.0.1`, so only this machine can connect. `HOST=0.0.0.0` exposes the arbitrary-SQL endpoint to the whole network. Do not do that on a network you do not control.
-- `DB_PATH` sets a SQLite file to use. Default is `:memory:`, so nothing survives a restart. With a file, tables other than `users` stay between runs. The `users` table is reseeded on every start either way.
 
 ## Running the demo
 
@@ -89,7 +109,9 @@ npm ci
 npm start
 ```
 
-Then open http://127.0.0.1:3000. While the tab is visible, the page checks the server every 10 seconds. If the server stops, the status lamp reads "backend unreachable".
+Use `npm install` instead of `npm ci` if you changed `package.json`.
+
+Then open http://127.0.0.1:3000 (http://localhost:3000 also works). While the tab is visible, the page checks the server every 10 seconds. If the server stops, the status lamp reads "backend unreachable".
 
 ### Configuration
 
@@ -227,15 +249,21 @@ The statement box is `POST /api/run-script`. These limits apply to it. The unsaf
 
 ## Tests
 
-`npm test` starts its own server on a random port between 3900 and 3989, runs `test/api.test.js` against it and stops it afterwards. Nothing is left running and port 3000 is not used.
+`npm test` runs `node --test "test/*.test.js"` from the project root. It takes about 10 seconds, and most of that is one page test that waits 8 seconds for the page's own request timeout.
 
-To run the tests against a server you already started:
+- `test/api.test.js` (48 tests) covers the API: login and search on both paths, the statement box and its limits, reset, health, input refusals, response headers, and the start-up checks for `PORT`, `HOST` and `DB_PATH`. It starts its own server on a random port from 3900 to 3989 and stops it afterwards.
+- `test/page.test.js` (12 tests) loads the real `public/index.html` in jsdom against its own server on a random port from 3990 to 4089. It covers the load-time proof, form validation, preset arming, the statement box, reset, and the offline, timed out and engine error stamps.
+
+`jsdom` is a dev dependency, installed by `npm ci`.
+
+To run the tests against a server you already started, for example with `npm start` in another terminal:
 
 ```bash
 BASE=http://127.0.0.1:3000 node --test test/api.test.js
+PAGE_BASE=http://127.0.0.1:3000 node --test test/page.test.js
 ```
 
-The tests call `POST /api/reset` themselves where they need a clean database.
+The tests call `POST /api/reset` to get a clean database, so running them against a server you are presenting from resets its data as well.
 
 ## Security focus
 
@@ -246,13 +274,3 @@ This project emphasizes:
 - least privilege access
 - safe database query construction
 - demonstration of common injection payloads
-
-## Suggested naming options
-
-- SQLShield Demo
-- SecureQuery Lab
-- InjectionGuard Demo
-- SafeSQL Showcase
-- QueryGuard
-
-The chosen project name for this repo is: SQLShield Demo

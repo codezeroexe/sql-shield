@@ -8,6 +8,7 @@ design: 3/4 gaps=3
 security: 2/2 gaps=0
 ship: 2/2 gaps=0
 test: 3/2 gaps=2
+docs: 3/3 gaps=3
 flow: phase=close left=0
 -->
 
@@ -349,6 +350,55 @@ Target 2, reached 3 (ahead of target). Mode build. Profile reused: localhost cla
 
 1. Real-browser check: jsdom does not render layout, fonts or the 1280×720 projector view; that stays a manual step (README pre-demo checklist).
 2. If the server timeout is broken, the suite takes about 60 s to finish (the test itself fails at 10 s).
+
+## Docs
+
+Date: 2026-10-14. Mode: audit. Target 3. Reached 2.
+
+### Reader profile (assumed from the shared profiles; correct it if wrong)
+
+- Presenter running it on the day: needs start, stop, reset, recovery, checklist. Comfortable with a terminal.
+- Cold reviewer judging the project: needs what it is and why it is built this way, in the first screen of the README.
+- Learner using the page: needs what to try and what to look at.
+- Person changing the code (the builder later, or a classmate): needs how the parts fit, how to test, what changed. Assumed, not confirmed.
+
+### Evidence
+
+- L1 met: README says what it is, who for, how to run.
+- L2 met: a clean copy runs from the written steps (`npm install`, `npm start`, `curl -X POST .../api/reset`, `BASE=... node --test test/api.test.js` all worked); every config value is described; presenter tasks and known failures (bad config, busy port, dead server) are covered.
+- L3 not met: no changelog; no overview of how the parts fit and why; several pages contradict the code (below); no learner guide.
+- API reference matches `server.js` on every route and status checked.
+
+### Gaps (ranked by harm)
+
+1. D1 Wrong: README "Tests" names only `test/api.test.js` and ports 3900-3989; `npm test` also runs `test/page.test.js` (jsdom, ports 3990-4089, `PAGE_BASE`).
+2. D2 Contradictory: `need-to-fix.md` lists fixed items as open (`database.sqlite`, headers, length caps, `mode`); PRODUCT.md "Evidence on Hand" still says `database.sqlite` is generated on boot; README "Project structure" misses tests, favicon, fonts, `.env.example`, `.github`, design docs; README "Run locally" duplicates "Running the demo" with different commands (`npm install` and localhost vs `npm ci` and 127.0.0.1).
+3. D3 Missing: overview for the person changing code: request flow, why one HTML file, why in-memory, `splitStatements`, the run-script wrapper and guards, how the page maps responses to stamps, the test harness.
+4. D4 Missing: changelog.
+5. D5 Missing: learner guide ("what to try"): the presets, the search leak term, a few statements for the box, what each stamp means.
+6. D6 Clarity: README leftovers ("Suggested naming options"); `plans.md` and the pending `frontend-handoff.md` deletion are historical and unlabelled.
+
+### Recommended options
+
+- D1: fix the README section in place (recommended); alternative: generate from `package.json` scripts (overkill).
+- D2: mark `need-to-fix.md` items done or replace it with a pointer to LEVELS.md (recommended: tick items with one-line notes); fix PRODUCT.md line; regenerate the tree; merge "Run locally" into "Running the demo".
+- D3: one `ARCHITECTURE.md` page (recommended, Sonnet) vs a README section (crowds the reviewer's first screen) vs comments only (already exist, not an overview).
+- D4: `CHANGELOG.md` from git history (recommended, Haiku).
+- D5: a short README "What to try" section (recommended) vs in-page help (design work, out of scope).
+- Stretch (level 4): run README commands as a test; link check in CI; decision records for the in-memory database and the block-list.
+### Docs build (2026-10-14)
+
+Reached 3. Built by 3 Haiku sub-plans and 1 Sonnet sub-plan, then reviewed on Opus.
+
+- D1 closed: README "Tests" now describes both test files, their ports and `PAGE_BASE`.
+- D2 closed: `need-to-fix.md` carries a status for every item (14 done, 10 partly, 6 by design, 13 open); `PRODUCT.md` evidence, driver-call and response-shape lines corrected; README tree regenerated; the duplicate "Run locally" section removed.
+- D3 closed: `ARCHITECTURE.md` (161 lines): middleware order, decisions with reasons, server and page internals, tests, change checklist, known limits.
+- D4 closed: `CHANGELOG.md` from git history.
+- D5 closed: README "What to try" and a stamp glossary.
+- D6 closed: naming list removed; `plans.md` marked historical.
+- Review: README examples run as written against a clean copy (UPDATE then login, UNION search, discarded `DROP TABLE` tail, reset); middleware order in ARCHITECTURE.md matches `server.js`; 60/60 tests.
+
+Open (level 4, stretch): README commands as tests, link check in CI, decision records, a timed newcomer walk-through. Not verified: DESIGN.md token names differ from the CSS custom properties (`ink-soft` vs `--ink-2`, `carbon-mid` vs `--carbon-2`); the page prints `db.all` for calls that run through `queryRows`.
 
 ## Notes for the user
 

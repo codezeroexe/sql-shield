@@ -15,3 +15,8 @@ npm-debug.log*
 !PRODUCT.md
 !LEVELS.md
 !.env.example
+!CHANGELOG.md
+!ARCHITECTURE.md
+!README.md
+!plans.md
+!need-to-fix.md
