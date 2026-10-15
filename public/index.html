@@ -135,7 +135,6 @@
         text-decoration: underline;
       }
       .linkbtn:disabled { color: var(--ink-3); cursor: default; }
-      .rail__note { font-size: 12px; color: var(--ink-3); }
 
       #screen { flex: 1 1 0; min-width: 0; overflow-y: auto; background: var(--sheet); }
       [data-screen] { padding: 56px 48px 40px; }
@@ -162,6 +161,10 @@
       .explain p { font-size: 20px; line-height: 1.55; }
       .explain__nav { margin-top: auto; display: flex; gap: 16px; align-items: center; }
       .explain__nav a { font-size: 18px; text-decoration: none; color: var(--ink); padding: 14px 0; }
+      .resetbtn { font: inherit; font-size: 16px; font-weight: 700; background: var(--alarm); color: var(--sheet); border: 0; padding: 14px 28px; cursor: pointer; align-self: flex-start; transition: filter var(--t-fast); }
+      .resetbtn:hover:not(:disabled) { filter: brightness(1.15); }
+      .resetbtn:active:not(:disabled) { transform: translateY(1px); }
+      .resetbtn:disabled { opacity: .6; cursor: wait; }
       .explain__nav a.next { font-weight: 700; background: var(--carbon); color: var(--sheet); padding: 14px 28px; }
       .demo { background: var(--sheet); border-left: 1px solid var(--rule); padding: 56px 48px 40px; display: flex; flex-direction: column; gap: 22px; min-width: 0; overflow-y: auto; }
       .demo .out { display: flex; flex-direction: column; gap: 22px; }
@@ -211,8 +214,6 @@
       [data-screen].home { padding: 56px 72px; max-width: 1272px; margin: 0 auto; }
       .home__top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 72px; }
       .home__mark { font-size: 20px; font-weight: 700; }
-      .home__nav { display: flex; gap: 32px; font-size: 16px; }
-      .home__nav a { color: var(--ink); }
       [data-screen].home > h1 { font-size: 64px; line-height: 1.08; font-weight: 800; max-width: 900px; }
       .home__lede { font-size: 22px; line-height: 1.5; color: var(--ink-2); max-width: 760px; margin-top: 24px; }
       .home__acts { display: flex; gap: 16px; margin-top: 36px; }
@@ -227,7 +228,6 @@
       .home__panel.safe > b { color: var(--carbon); }
       .home__n { font-size: 56px; font-weight: 800; line-height: 1.1; color: var(--alarm); }
       .home__panel.safe .home__n { color: var(--carbon); }
-      .home__foot { margin-top: 40px; font-size: 14px; color: var(--ink-3); }
 
       /* ---- lab ---- */
       [data-screen].lab { padding: 36px 40px; display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 24px; align-items: start; }
@@ -339,9 +339,8 @@
         </div>
         <div class="rail__foot">
           <div>Demo database: <b id="dbUsers">…</b></div>
-          <button class="linkbtn" type="button" id="resetBtn">Reset database</button>
+          <button class="resetbtn" type="button" id="resetBtn">Reset database</button>
           <div id="resetNote" role="status" hidden></div>
-          <div class="rail__note">Teaching demo. Runs on a throwaway local database.</div>
         </div>
       </nav>
 
@@ -351,7 +350,7 @@
           <button class="linkbtn" type="button" id="bannerReset" hidden>Reset database</button>
         </div>
         <section class="home" data-screen="home" data-title="Home" hidden>
-          <div class="home__top"><span class="home__mark" style="display:inline-flex;align-items:center;gap:10px"><svg width="32" height="32" viewBox="0 0 64 64" aria-hidden="true" style="flex:none"><path d="M8 6 H56 V36 L44 48 L32 58 L20 48 L8 36 Z" style="fill: var(--sheet); stroke: var(--ink)" stroke-width="6"/><text x="32" y="40" text-anchor="middle" font-family="Azeret Mono, monospace" font-weight="800" font-size="30" style="fill: var(--carbon)">?</text></svg>SQLShield</span><nav class="home__nav" aria-label="Start"><a href="#/learn/1">Lessons</a><a href="#/lab/login">Lab</a></nav></div>
+          <div class="home__top"><span class="home__mark" style="display:inline-flex;align-items:center;gap:16px;font-size:34px;font-weight:800"><svg width="64" height="64" viewBox="0 0 64 64" aria-hidden="true" style="flex:none"><path d="M8 6 H56 V36 L44 48 L32 58 L20 48 L8 36 Z" style="fill: var(--carbon); stroke: var(--ink)" stroke-width="5"/><text x="32" y="40" text-anchor="middle" font-family="Azeret Mono, monospace" font-weight="800" font-size="30" style="fill: var(--sheet)">?</text></svg>SQLShield</span></div>
           <h1 tabindex="-1">How SQL injection works, and how to stop it.</h1>
           <p class="home__lede">A hands-on demo for beginners. Type into a real login, see exactly what the database receives, and learn the one change that makes it safe.</p>
           <div class="home__acts"><a class="primary" href="#/learn/1">Start the lessons →</a><a href="#/lab/login">Open the Lab</a></div>
@@ -362,7 +361,6 @@
               <div class="home__panel safe"><b>Safe login</b><div class="home__n" id="hmS"></div><div>The text stayed a value.</div></div>
             </div>
           </div>
-          <div class="home__foot">6 short lessons · 3 tools · runs on a throwaway local database</div>
         </section>
         <section class="lesson" data-screen="learn/1" data-title="How a login works" hidden></section>
         <section class="lesson" data-screen="learn/2" data-title="The trick" hidden></section>
@@ -916,7 +914,6 @@ WHERE username = '' OR '1'='1';</textarea></label>
             <tr class="hi"><td>1</td><td>alice</td><td>pw123</td></tr><tr><td>2</td><td>bob</td><td>hunter2</td></tr>
             <tr><td>3</td><td>admin</td><td>rootpass</td></tr><tr><td>4</td><td>charlie</td><td>letmein</td></tr>
             <tr><td>5</td><td>dave</td><td>sunshine</td></tr><tr><td>6</td><td>erin</td><td>qwerty12</td></tr><tr><td>7</td><td>frank</td><td>dragon99</td></tr><tr><td>8</td><td>grace</td><td>iloveyou</td></tr></tbody></table>
-            <div class="note">Made-up sample users in a throwaway database.</div>
             <div class="dh">The question the database got</div><div class="out"></div>`,
           async run(d) {
             const out = d.querySelector(".out");
